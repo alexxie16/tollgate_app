@@ -5,6 +5,8 @@ import 'package:tollgate_app/presentation/common/extensions/build_context_x.dart
 import 'package:tollgate_app/presentation/router/routes.dart';
 
 import 'controllers/mint_screen_notifier.dart';
+import '../providers/current_mint_provider.dart';
+import '../widgets/no_mint_configured_view.dart';
 import 'widgets/widgets.dart';
 
 class MintScreen extends ConsumerWidget {
@@ -12,18 +14,8 @@ class MintScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final mintScreenStateAsync = ref.watch(mintScreenNotifierProvider);
+    final currentMintAsync = ref.watch(currentMintProvider);
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-
-    void handleCloseInvoice() {
-      ref.read(mintScreenNotifierProvider.notifier).reset();
-
-      if (context.canPop()) {
-        context.pop();
-      } else {
-        context.go(Routes.wallet);
-      }
-    }
 
     return Scaffold(
       backgroundColor: isDarkMode ? context.colorScheme.surface : Colors.white,
@@ -44,30 +36,54 @@ class MintScreen extends ConsumerWidget {
         ),
       ),
       extendBodyBehindAppBar: false,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 10.0),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: switch (mintScreenStateAsync) {
-              AsyncData(:final value) => _buildUI(
-                  mintScreenNotifier:
-                      ref.read(mintScreenNotifierProvider.notifier),
-                  mintScreenState: value,
-                  handleCloseInvoice: handleCloseInvoice,
-                ),
-              AsyncError(:final error) => ErrorWidget(error),
-              _ => SizedBox(
-                  height: MediaQuery.of(context).size.height -
-                      MediaQuery.of(context).padding.top -
-                      AppBar().preferredSize.height -
-                      32, // Account for padding
-                  child: const Center(
-                    child: CircularProgressIndicator(),
-                  ),
-                ),
-            },
-          ),
+      body: currentMintAsync.when(
+        data: (currentMint) {
+          if (currentMint == null) {
+            return const NoMintConfiguredView(title: 'Mint unavailable');
+          }
+
+          final mintScreenStateAsync = ref.watch(mintScreenNotifierProvider);
+
+          void handleCloseInvoice() {
+            ref.read(mintScreenNotifierProvider.notifier).reset();
+
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go(Routes.wallet);
+            }
+          }
+
+          return SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 10.0),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: switch (mintScreenStateAsync) {
+                  AsyncData(:final value) => _buildUI(
+                      mintScreenNotifier:
+                          ref.read(mintScreenNotifierProvider.notifier),
+                      mintScreenState: value,
+                      handleCloseInvoice: handleCloseInvoice,
+                    ),
+                  AsyncError(:final error) => ErrorWidget(error),
+                  _ => SizedBox(
+                      height: MediaQuery.of(context).size.height -
+                          MediaQuery.of(context).padding.top -
+                          AppBar().preferredSize.height -
+                          32,
+                      child: const Center(
+                        child: CircularProgressIndicator(),
+                      ),
+                    ),
+                },
+              ),
+            ),
+          );
+        },
+        error: (error, stack) => ErrorWidget(error),
+        loading: () => const Center(
+          child: CircularProgressIndicator(),
         ),
       ),
     );

@@ -4,7 +4,9 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:tollgate_app/presentation/common/extensions/build_context_x.dart';
 import 'package:tollgate_app/presentation/router/routes.dart';
 
+import '../providers/current_mint_provider.dart';
 import '../widgets/balance_card.dart';
+import '../widgets/no_mint_configured_view.dart';
 import 'controllers/send_screen_notifier.dart';
 import 'widgets/widgets.dart'; // Import the barrel file
 
@@ -13,15 +15,7 @@ class SendScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final sendScreenStateAsync = ref.watch(sendScreenNotifierProvider);
-
-    void handleCloseToken() {
-      if (context.canPop()) {
-        context.pop();
-      } else {
-        context.go(Routes.wallet);
-      }
-    }
+    final currentMintAsync = ref.watch(currentMintProvider);
 
     return Scaffold(
       backgroundColor: context.colorScheme.surfaceContainerHighest,
@@ -42,29 +36,51 @@ class SendScreen extends ConsumerWidget {
         ),
       ),
       extendBodyBehindAppBar: false,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: switch (sendScreenStateAsync) {
-              AsyncData(:final value) => _buildUI(
-                  sendScreenNotifier:
-                      ref.read(sendScreenNotifierProvider.notifier),
-                  value: value,
-                  handleCloseToken: handleCloseToken,
-                ),
-              AsyncError(:final error) => ErrorWidget(error),
-              _ => SizedBox(
-                  height: MediaQuery.of(context).size.height -
-                      MediaQuery.of(context).padding.top -
-                      AppBar().preferredSize.height -
-                      32, // Account for padding
-                  child: const Center(
-                    child: CircularProgressIndicator(),
-                  ),
-                ),
-            },
-          ),
+      body: currentMintAsync.when(
+        data: (currentMint) {
+          if (currentMint == null) {
+            return const NoMintConfiguredView(title: 'Send unavailable');
+          }
+
+          final sendScreenStateAsync = ref.watch(sendScreenNotifierProvider);
+
+          void handleCloseToken() {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go(Routes.wallet);
+            }
+          }
+
+          return SafeArea(
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: switch (sendScreenStateAsync) {
+                  AsyncData(:final value) => _buildUI(
+                      sendScreenNotifier:
+                          ref.read(sendScreenNotifierProvider.notifier),
+                      value: value,
+                      handleCloseToken: handleCloseToken,
+                    ),
+                  AsyncError(:final error) => ErrorWidget(error),
+                  _ => SizedBox(
+                      height: MediaQuery.of(context).size.height -
+                          MediaQuery.of(context).padding.top -
+                          AppBar().preferredSize.height -
+                          32,
+                      child: const Center(
+                        child: CircularProgressIndicator(),
+                      ),
+                    ),
+                },
+              ),
+            ),
+          );
+        },
+        error: (error, stack) => ErrorWidget(error),
+        loading: () => const Center(
+          child: CircularProgressIndicator(),
         ),
       ),
     );

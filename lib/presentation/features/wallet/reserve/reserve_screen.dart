@@ -4,7 +4,9 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:tollgate_app/presentation/common/extensions/build_context_x.dart';
 import 'package:tollgate_app/presentation/router/routes.dart';
 
+import '../providers/current_mint_provider.dart';
 import '../widgets/balance_card.dart';
+import '../widgets/no_mint_configured_view.dart';
 import 'controllers/reserve_screen_notifier.dart';
 import 'widgets/widgets.dart';
 
@@ -13,15 +15,7 @@ class ReserveScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final reserveScreenStateAsync = ref.watch(reserveScreenNotifierProvider);
-
-    void handleReserveComplete() {
-      if (context.canPop()) {
-        context.pop();
-      } else {
-        context.go(Routes.wallet);
-      }
-    }
+    final currentMintAsync = ref.watch(currentMintProvider);
 
     return Scaffold(
       backgroundColor: context.colorScheme.surfaceContainerHighest,
@@ -42,29 +36,51 @@ class ReserveScreen extends ConsumerWidget {
         ),
       ),
       extendBodyBehindAppBar: false,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: switch (reserveScreenStateAsync) {
-              AsyncData(:final value) => _buildUI(
-                  reserveScreenNotifier:
-                      ref.read(reserveScreenNotifierProvider.notifier),
-                  value: value,
-                  handleReserveComplete: handleReserveComplete,
-                ),
-              AsyncError(:final error) => ErrorWidget(error),
-              _ => SizedBox(
-                  height: MediaQuery.of(context).size.height -
-                      MediaQuery.of(context).padding.top -
-                      AppBar().preferredSize.height -
-                      32, // Account for padding
-                  child: const Center(
-                    child: CircularProgressIndicator(),
-                  ),
-                ),
-            },
-          ),
+      body: currentMintAsync.when(
+        data: (currentMint) {
+          if (currentMint == null) {
+            return const NoMintConfiguredView(title: 'Reserve unavailable');
+          }
+
+          final reserveScreenStateAsync = ref.watch(reserveScreenNotifierProvider);
+
+          void handleReserveComplete() {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go(Routes.wallet);
+            }
+          }
+
+          return SafeArea(
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: switch (reserveScreenStateAsync) {
+                  AsyncData(:final value) => _buildUI(
+                      reserveScreenNotifier:
+                          ref.read(reserveScreenNotifierProvider.notifier),
+                      value: value,
+                      handleReserveComplete: handleReserveComplete,
+                    ),
+                  AsyncError(:final error) => ErrorWidget(error),
+                  _ => SizedBox(
+                      height: MediaQuery.of(context).size.height -
+                          MediaQuery.of(context).padding.top -
+                          AppBar().preferredSize.height -
+                          32,
+                      child: const Center(
+                        child: CircularProgressIndicator(),
+                      ),
+                    ),
+                },
+              ),
+            ),
+          );
+        },
+        error: (error, stack) => ErrorWidget(error),
+        loading: () => const Center(
+          child: CircularProgressIndicator(),
         ),
       ),
     );
