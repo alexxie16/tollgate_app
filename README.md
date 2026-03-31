@@ -6,6 +6,7 @@ Flutter mobile application for discovering TollGate Wi-Fi networks and paying fo
 
 - Android debug build verified locally with `flutter build apk --debug`
 - Android emulator launch and app install verified locally with `flutter run -d emulator-5554 --debug --no-resident`
+- Android phone sideload verified locally with `adb install -r build/app/outputs/flutter-apk/app-debug.apk`
 - Primary supported build target is Android
 - iOS/macOS toolchain can be configured, but the app's Wi-Fi connection flow is Android-first
 
@@ -133,6 +134,33 @@ Or target a connected Android device explicitly:
 flutter run -d <android-device-id>
 ```
 
+Sideload an already-built debug APK onto a connected Android phone:
+
+```bash
+adb devices -l
+adb install -r build/app/outputs/flutter-apk/app-debug.apk
+```
+
+If you want to launch the installed app from the shell:
+
+```bash
+adb shell monkey -p com.example.tollgate_app -c android.intent.category.LAUNCHER 1
+```
+
+### Troubleshooting
+
+If `flutter build apk --debug` fails with `Unable to locate a Java Runtime`, configure Flutter to use JDK 17:
+
+```bash
+flutter config --jdk-dir="/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home"
+```
+
+If `flutter devices` shows an unwanted iPhone local-network warning on macOS, that is usually caused by an existing Xcode/CoreDevice pairing on the host, not by this repo. Removing the stale pairing stops Flutter from probing that device:
+
+```bash
+xcrun devicectl manage unpair --device <ios-udid>
+```
+
 ## Notes
 
 - `wifi_scan` and `wifi_iot` are sourced from `third_party/WiFiFlutter` via local overrides because the published packages are not compatible with the Dart SDK used by this app.
@@ -150,4 +178,6 @@ flutter build apk --debug
 flutter devices
 flutter emulators --launch Tollgate_API_35
 flutter run -d emulator-5554
+adb devices -l
+adb install -r build/app/outputs/flutter-apk/app-debug.apk
 ```
