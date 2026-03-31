@@ -84,7 +84,7 @@ abstract final class AppTheme {
     ),
   );
 
-  static final _cardTheme = CardTheme(
+  static final _cardTheme = CardThemeData(
     color: AppColors.darkCardBackground,
     elevation: 0,
     shape: RoundedRectangleBorder(

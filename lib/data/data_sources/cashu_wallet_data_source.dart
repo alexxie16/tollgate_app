@@ -1,36 +1,36 @@
 import 'dart:io';
 
-import 'package:cdk_flutter/cdk_flutter.dart';
+import 'package:cdk_flutter/cdk_flutter.dart' as cdk;
 import 'package:path_provider/path_provider.dart';
 
 class CashuWalletDataSource {
-  final MultiMintWallet _wallet;
+  final cdk.WalletRepository _wallet;
 
   CashuWalletDataSource._(this._wallet);
 
   static Future<CashuWalletDataSource> init() async {
-    await CdkFlutter.init();
+    await cdk.CdkFlutter.init();
     final path = await getApplicationDocumentsDirectory();
-    final seedFile = File('${path.path}/seed.txt');
+    final mnemonicFile = File('${path.path}/mnemonic.txt');
 
-    String seed;
-    if (await seedFile.exists()) {
-      seed = await seedFile.readAsString();
+    String mnemonic;
+    if (await mnemonicFile.exists()) {
+      mnemonic = await mnemonicFile.readAsString();
     } else {
-      seed = generateHexSeed();
-      await seedFile.writeAsString(seed);
+      mnemonic = cdk.generateMnemonic();
+      await mnemonicFile.writeAsString(mnemonic);
     }
 
     final db =
-        await WalletDatabase.newInstance(path: '${path.path}/wallet.sqlite');
-    final wallet = await MultiMintWallet.newFromHexSeed(
+        await cdk.WalletDatabase.newInstance(path: '${path.path}/wallet.sqlite');
+    final wallet = await cdk.WalletRepository.newInstance(
       unit: 'sat',
-      seed: seed,
-      localstore: db,
+      mnemonic: mnemonic,
+      db: db,
     );
 
     return CashuWalletDataSource._(wallet);
   }
 
-  MultiMintWallet get wallet => _wallet;
+  cdk.WalletRepository get wallet => _wallet;
 }

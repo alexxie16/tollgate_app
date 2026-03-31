@@ -8,7 +8,7 @@ import '../../../../core/result/result.dart';
 import '../../../../domain/wallet/errors/wallet_errors.dart';
 import '../../../../domain/wallet/value_objects/mint_amount.dart';
 
-part 'mint_transactions_provider.g.dart';
+part 'mint_transactions_providers.g.dart';
 
 @riverpod
 Stream<Result<MintQuote, MintQuoteStreamFailure>> mintQuoteStream(

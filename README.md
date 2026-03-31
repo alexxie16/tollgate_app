@@ -1,79 +1,125 @@
 # TollGate Wi-Fi Access App
 
-A Flutter mobile application that allows users to pay for Wi-Fi access using Bitcoin via Cashu tokens.
+Flutter mobile application for discovering TollGate Wi-Fi networks and paying for access with Bitcoin via Cashu.
 
-## 📱 Features
+## Status
 
-- **Wi-Fi Network Scanning**: Discover available Wi-Fi networks
-- **Secure Payments**: Pay for Wi-Fi access using Cashu tokens (Bitcoin Lightning)
-- **Wallet Management**: Built-in Cashu wallet for managing tokens
-- **Connection Management**: Monitor your Wi-Fi connection status
-- **Multi-platform Support**: Works on iOS, Android, macOS, Linux, and Windows
+- Android debug build verified locally with `flutter build apk --debug`
+- Primary supported build target is Android
+- iOS/macOS toolchain can be configured, but the app's Wi-Fi connection flow is Android-first
 
-## 🛠️ Tech Stack
+## Repository Layout
 
-- **Framework**: Flutter 3.3+
-- **State Management**: Riverpod
-- **Navigation**: Go Router
-- **Networking**: Dio, HTTP
-- **Internationalization**: Flutter Localizations
-- **Persistence**: Flutter Secure Storage, Shared Preferences
+This repo now depends on in-repo submodules and local package overrides:
 
-## 🚀 Getting Started
+- `cdk_flutter/`: Cashu Flutter bindings and Rust bridge
+- `third_party/WiFiFlutter/`: vendored source for `wifi_scan` and `wifi_iot`
 
-### Prerequisites
+Clone with submodules:
 
-- Flutter SDK 3.3 or higher
-- Dart SDK 3.3 or higher
-
-### Installation
-
-1. Clone the repository:
-
-   ```
-   git clone https://github.com/yourusername/tollgate_app.git
-   ```
-
-2. Navigate to the project directory:
-
-   ```
-   cd tollgate_app
-   ```
-
-3. Get dependencies:
-
-   ```
-   flutter pub get
-   ```
-
-4. Run the app:
-   ```
-   flutter run
-   ```
-
-## 🏗️ Project Structure
-
-```
-lib/
-├── config/             # App configuration
-├── core/               # Core providers and services
-├── data/               # Data services
-├── domain/             # Business logic and models
-├── ui/                 # UI components
-│   ├── connection_details/
-│   ├── core/           # Shared UI components
-│   ├── home/
-│   ├── network_scan/
-│   ├── payment/
-│   ├── settings/
-│   └── wallet/
-└── utils/              # Utility functions
+```bash
+git clone --recurse-submodules <repo-url>
 ```
 
-## 📄 License
+If you already cloned the repo:
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+```bash
+git submodule update --init --recursive
+```
 
-## 👨‍💻 Authors
+## Build Requirements
 
-- Your Name
+### Core
+
+- Flutter `3.41.6`
+- Dart `3.11.x`
+- Rust toolchain with `cargo`
+- CMake
+
+### Android
+
+- JDK `17`
+- Android SDK command-line tools
+- Android platform tools
+- Android SDK platforms `33`, `34`, `35`, and `36`
+- Android build-tools `34.0.0`, `35.0.0`, and `36.0.0`
+- Android NDK `27.0.12077973`
+
+### Apple tooling
+
+- Xcode
+- CocoaPods
+- At least one installed iOS Simulator runtime if you want simulator builds
+
+## Local Environment
+
+On this machine, the working Android/Java paths are:
+
+- `JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home`
+- `ANDROID_HOME=/opt/homebrew/share/android-commandlinetools`
+- `ANDROID_SDK_ROOT=/opt/homebrew/share/android-commandlinetools`
+
+The Android project is configured to use those locations through:
+
+- `android/local.properties`
+- `android/gradle.properties`
+
+## Project Setup
+
+1. Install Flutter, Rust, CMake, JDK 17, and Android SDK tooling.
+2. Initialize submodules.
+3. Fetch Dart/Flutter packages.
+4. Generate Riverpod/Freezed outputs.
+
+Commands:
+
+```bash
+flutter pub get
+dart run build_runner build --delete-conflicting-outputs
+```
+
+## Build
+
+### Analyze
+
+```bash
+flutter analyze
+```
+
+Current analysis state is buildable, with warnings/info remaining from deprecated Flutter APIs and a few unused members.
+
+### Android Debug APK
+
+```bash
+flutter build apk --debug
+```
+
+Output:
+
+```bash
+build/app/outputs/flutter-apk/app-debug.apk
+```
+
+### Run on Android device or emulator
+
+```bash
+flutter run
+```
+
+## Notes
+
+- `wifi_scan` and `wifi_iot` are sourced from `third_party/WiFiFlutter` via local overrides because the published packages are not compatible with the Dart SDK used by this app.
+- `cdk_flutter` is built from the in-repo submodule and requires the Rust/Android native toolchain during Android builds.
+- `flutter gen-l10n` currently warns that `synthetic-package` in `l10n.yaml` is deprecated and has no effect.
+- iOS programmatic Wi-Fi connection is limited by platform behavior; Android is the practical target for full app functionality.
+
+## Useful Commands
+
+```bash
+git submodule update --init --recursive
+flutter pub get
+dart run build_runner build --delete-conflicting-outputs
+flutter analyze
+flutter build apk --debug
+flutter run
+```

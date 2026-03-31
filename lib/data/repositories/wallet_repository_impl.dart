@@ -1,4 +1,4 @@
-import 'package:cdk_flutter/cdk_flutter.dart';
+import 'package:cdk_flutter/cdk_flutter.dart' hide WalletRepository;
 
 import '../../core/result/result.dart';
 import '../../core/result/unit.dart';
