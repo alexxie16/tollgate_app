@@ -1,0 +1,6 @@
+[submodule "cdk_flutter"]
+	path = cdk_flutter
+	url = https://github.com/cashubtc/cdk-flutter.git
+[submodule "third_party/WiFiFlutter"]
+	path = third_party/WiFiFlutter
+	url = https://github.com/flutternetwork/WiFiFlutter.git

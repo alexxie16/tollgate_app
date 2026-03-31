@@ -17,7 +17,7 @@ dependencies:
 
   # Cashu
   cdk_flutter:
-    path: ../cdk_flutter
+    path: cdk_flutter
 
   # Networking
   http: ^1.1.2
@@ -60,6 +60,12 @@ dev_dependencies:
   freezed: ^2.5.8
   riverpod_generator: ^2.6.0
   build_runner: ^2.4.15
+
+dependency_overrides:
+  wifi_scan:
+    path: third_party/WiFiFlutter/packages/wifi_scan
+  wifi_iot:
+    path: third_party/WiFiFlutter/packages/wifi_iot
 
 flutter:
   uses-material-design: true
