@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:tollgate_app/presentation/router/routes.dart';
 
 import 'widgets/action_card.dart';
@@ -82,7 +82,7 @@ class WalletScreen extends ConsumerWidget {
               subtitle: 'Add funds to wallet',
               color: actionColors['mint']!,
               onTap: () {
-                context.go('/wallet/mint');
+                context.go(Routes.mint);
               },
             ),
 
@@ -123,7 +123,7 @@ class WalletScreen extends ConsumerWidget {
               title: 'Send',
               color: actionColors['send']!,
               onTap: () {
-                context.go('/wallet/send');
+                context.go(Routes.send);
               },
             ),
 
@@ -133,7 +133,7 @@ class WalletScreen extends ConsumerWidget {
               title: 'Receive',
               color: actionColors['receive']!,
               onTap: () {
-                // TODO: Navigate to receive screen
+                context.go(Routes.receive);
               },
             ),
 

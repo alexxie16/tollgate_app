@@ -43,8 +43,14 @@ abstract class WalletRepository {
     required PreparedSend preparedSend,
   });
 
+  Future<Result<BigInt, ReceiveFailure>> receive({
+    required Token token,
+  });
+
   Stream<Result<MintQuote, MintQuoteStreamFailure>> mint({
     required Mint mint,
     required MintAmount amount,
   });
+
+  Future<List<Transaction>> listTransactions();
 }

@@ -9,6 +9,8 @@ Flutter mobile application for discovering TollGate Wi-Fi networks and paying fo
 - Android phone sideload verified locally with `adb install -r build/app/outputs/flutter-apk/app-debug.apk`
 - Wallet mint configuration flow now exists in-app under Settings
 - Default wallet mint is Minibits at `https://mint.minibits.cash/Bitcoin`, with support for custom mint URLs
+- Wallet `Receive` action now opens a real Cashu token receive flow
+- Wallet `Recent Transactions` now loads actual wallet transactions from the Cashu/CDK wallet history
 - Primary supported build target is Android
 - iOS/macOS toolchain can be configured, but the app's Wi-Fi connection flow is Android-first
 
@@ -149,6 +151,24 @@ https://mint.minibits.cash/Bitcoin/v1/info
 - Android build and runtime smoke tests were rerun after these changes.
 - End-to-end balance update after paying a real invoice still requires manual payment verification.
 
+## Wallet Actions
+
+### Receive a Cashu token
+
+1. Open `Wallet`.
+2. Tap `Receive`.
+3. Paste a Cashu token string such as `cashuA...`.
+4. Tap `Receive`.
+5. The app redeems the token into the wallet and switches the current mint to the token mint if needed.
+
+### Recent transactions
+
+The `Recent Transactions` section on the wallet screen now reads real transaction history from the underlying Cashu wallet instead of showing a placeholder list.
+
+- Incoming entries cover successful minting and received tokens.
+- Outgoing entries cover send and reserve actions.
+- Transaction data comes from the wallet backend via `listTransactions()`.
+
 ### Run on Android device or emulator
 
 List devices:
@@ -210,6 +230,12 @@ If the wallet says no mint is configured, open `Settings` and either:
 - paste another valid Cashu mint URL and tap `Save Mint`
 
 If invoice creation fails, verify that the configured mint URL is reachable and supports Cashu minting, then retry from the Mint screen.
+
+If a received token fails to import, verify that:
+
+- the pasted value is a valid Cashu token string
+- the token has not already been spent
+- the mint referenced by the token is reachable
 
 If `flutter devices` shows an unwanted iPhone local-network warning on macOS, that is usually caused by an existing Xcode/CoreDevice pairing on the host, not by this repo. Removing the stale pairing stops Flutter from probing that device:
 

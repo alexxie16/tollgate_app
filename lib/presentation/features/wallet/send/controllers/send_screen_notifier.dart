@@ -10,6 +10,7 @@ import '../../../../../core/result/unit.dart';
 import '../../../../../domain/wallet/errors/wallet_errors.dart';
 import '../../../../../domain/wallet/value_objects/send_amount.dart';
 import '../../providers/mint_transactions_providers.dart';
+import '../../providers/wallet_transactions_provider.dart';
 
 part 'send_screen_notifier.freezed.dart';
 part 'send_screen_notifier.g.dart';
@@ -136,6 +137,7 @@ class SendScreenNotifier extends _$SendScreenNotifier {
 
     switch (generateTokenResult) {
       case Ok(value: final token):
+        ref.invalidate(walletTransactionsProvider);
         update((state) => SendScreenState.tokenGenerated(
               token: token,
             ));

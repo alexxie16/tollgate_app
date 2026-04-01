@@ -131,6 +131,23 @@ class WalletRepositoryImpl extends WalletRepository {
   }
 
   @override
+  Future<Result<BigInt, ReceiveFailure>> receive({
+    required Token token,
+  }) async {
+    try {
+      final mintWallet = await walletDataSource.wallet.createOrGetWallet(
+        mintUrl: token.mintUrl,
+      );
+      final receivedAmount = await mintWallet.receive(token: token);
+      return Result.ok(receivedAmount);
+    } catch (e, stackTrace) {
+      return Result.failure(
+        ReceiveFailure.unexpected(e, stackTrace: stackTrace),
+      );
+    }
+  }
+
+  @override
   Stream<Result<MintQuote, MintQuoteStreamFailure>> mint({
     required Mint mint,
     required MintAmount amount,
@@ -154,5 +171,10 @@ class WalletRepositoryImpl extends WalletRepository {
         MintQuoteStreamFailure.unexpected(e, stackTrace: stackTrace),
       );
     }
+  }
+
+  @override
+  Future<List<Transaction>> listTransactions() async {
+    return walletDataSource.wallet.listTransactions();
   }
 }

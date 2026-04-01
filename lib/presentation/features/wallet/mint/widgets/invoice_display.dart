@@ -12,6 +12,7 @@ import '../../../../common/widgets/cards/error_card.dart';
 import '../../../../common/widgets/qr_code/qr_code_card.dart';
 import '../../../../common/widgets/snackbar/app_snackbar.dart';
 import '../../providers/mint_transactions_providers.dart';
+import '../../providers/wallet_transactions_provider.dart';
 
 class InvoiceDisplay extends ConsumerWidget {
   final Mint mint;
@@ -33,7 +34,14 @@ class InvoiceDisplay extends ConsumerWidget {
     ref.listen(mintQuoteProvider, (previous, current) {
       switch (current) {
         case AsyncData(value: Ok(value: final mintQuote)):
-          if (mintQuote.state == MintQuoteState.issued) {
+          final previousQuote = switch (previous) {
+            AsyncData(value: Ok(value: final quote)) => quote,
+            _ => null,
+          };
+
+          if (mintQuote.state == MintQuoteState.issued &&
+              previousQuote?.state != MintQuoteState.issued) {
+            ref.invalidate(walletTransactionsProvider);
             Future.delayed(const Duration(seconds: 1), onClose);
           }
         default:

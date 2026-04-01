@@ -11,6 +11,7 @@ import '../../../../../core/result/unit.dart';
 import '../../../../../domain/wallet/errors/wallet_errors.dart';
 import '../../../../../domain/wallet/value_objects/send_amount.dart';
 import '../../providers/mint_transactions_providers.dart';
+import '../../providers/wallet_transactions_provider.dart';
 
 part 'reserve_screen_notifier.freezed.dart';
 part 'reserve_screen_notifier.g.dart';
@@ -159,6 +160,7 @@ class ReserveScreenNotifier extends _$ReserveScreenNotifier {
       case Ok(value: final token):
         // Store the token locally
         await ref.read(storeLocalEcashProvider(token.encoded).future);
+        ref.invalidate(walletTransactionsProvider);
 
         // Update state to show success
         update((state) => ReserveScreenState.complete(

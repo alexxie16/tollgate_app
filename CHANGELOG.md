@@ -27,3 +27,14 @@
 - Diagnosed the local Android emulator keyboard issue to the AVD config at `~/.android/avd/Tollgate_API_35.avd/config.ini`.
 - Changed `hw.keyboard=no` to `hw.keyboard=yes` so the emulator accepts Mac hardware keyboard input.
 - Restarted the emulator and re-ran the app on `emulator-5554`.
+
+### Attempt 4 - Wallet receive flow and recent transactions
+
+- Wired the wallet `Receive` button to a real receive screen instead of leaving it as a no-op.
+- Added token receive support through the wallet repository using `cdk_flutter` token redemption.
+- Implemented a paste-first receive UI for Cashu tokens and switch the current mint to the token mint after a successful receive.
+- Replaced the placeholder `Recent Transactions` widget with real wallet transaction history from `listTransactions()`.
+- Invalidated transaction history after mint, send, reserve, and receive success paths so the wallet list updates immediately.
+- Re-ran `flutter analyze` with no new analysis errors.
+- Re-ran `flutter build apk --debug` successfully.
+- Re-ran `flutter run -d emulator-5554 --debug --no-resident` successfully.
