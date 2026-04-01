@@ -42,7 +42,10 @@ class MintScreenNotifier extends _$MintScreenNotifier {
   }
 
   Result<Unit, MintAmountValidationFailure> validateAmount() {
-    final currentState = this as MintScreenEditingState;
+    final currentState = state.unwrapPrevious().valueOrNull;
+    if (currentState == null || currentState is! MintScreenEditingState) {
+      throw Exception('Current state is not an MintScreenEditingState');
+    }
     return MintAmount.validate(currentState.amount);
   }
 
@@ -55,12 +58,20 @@ class MintScreenNotifier extends _$MintScreenNotifier {
       throw Exception('Current state is not an MintScreenEditingState');
     }
 
+    final mintAmountResult = MintAmount.create(currentState.amount);
+    if (mintAmountResult.isFailure) {
+      update((state) => (state as MintScreenEditingState).copyWith(
+            showErrorMessages: true,
+            isGeneratingInvoice: false,
+          ));
+      return;
+    }
+
     update((state) => (state as MintScreenEditingState).copyWith(
           isGeneratingInvoice: true,
         ));
 
     // Create a MintAmount value object from the current amount
-    final mintAmountResult = MintAmount.create(currentState.amount);
     switch (mintAmountResult) {
       case Ok(value: final mintAmount):
         update((state) => MintScreenState.invoice(
@@ -68,8 +79,7 @@ class MintScreenNotifier extends _$MintScreenNotifier {
               mintAmount: mintAmount,
             ));
         return;
-      case Failure(failure: final error):
-        state = AsyncError(error, StackTrace.current);
+      case Failure():
         return;
     }
   }

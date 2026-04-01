@@ -8,9 +8,9 @@ import '../../../../../config/themes/colors.dart';
 import '../../../../../core/result/result.dart';
 import '../../../../../domain/wallet/value_objects/mint_amount.dart';
 import '../../../../common/widgets/buttons/app_button.dart';
+import '../../../../common/widgets/cards/error_card.dart';
 import '../../../../common/widgets/qr_code/qr_code_card.dart';
 import '../../../../common/widgets/snackbar/app_snackbar.dart';
-import '../../providers/current_mint_provider.dart';
 import '../../providers/mint_transactions_providers.dart';
 
 class InvoiceDisplay extends ConsumerWidget {
@@ -27,56 +27,38 @@ class InvoiceDisplay extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final currentMintAsync = ref.watch(currentMintProvider);
-    switch (currentMintAsync) {
-      case AsyncData(:final value):
-        if (value == null) {
-          return ErrorWidget(Exception('Mint not found'));
-        }
-        final mintQuoteAsync = ref.watch(mintQuoteStreamProvider(
-          mint,
-          amount,
-        ));
+    final mintQuoteProvider = mintQuoteStreamProvider(mint, amount);
+    final mintQuoteAsync = ref.watch(mintQuoteProvider);
 
-        ref.listen(
-            mintQuoteStreamProvider(
-              mint,
-              amount,
-            ), (previous, current) {
-          switch (current) {
-            case AsyncData(:final value):
-              switch (value) {
-                case Ok(value: final mintQuote):
-                  if (mintQuote.state == MintQuoteState.issued) {
-                    Future.delayed(const Duration(seconds: 1), () {
-                      onClose();
-                    });
-                  }
-                case Failure(:final failure):
-                  throw failure;
-              }
-            case AsyncError(:final error):
-              throw error;
-            default:
-              return;
+    ref.listen(mintQuoteProvider, (previous, current) {
+      switch (current) {
+        case AsyncData(value: Ok(value: final mintQuote)):
+          if (mintQuote.state == MintQuoteState.issued) {
+            Future.delayed(const Duration(seconds: 1), onClose);
           }
-        });
+        default:
+          return;
+      }
+    });
 
-        return switch (mintQuoteAsync) {
-          AsyncData(value: final result) => switch (result) {
-              Ok(value: final mintQuote) =>
-                _buildWidget(context, mintQuote: mintQuote),
-              Failure(:final failure) => ErrorWidget(failure),
-            },
-          AsyncError(:final error) => ErrorWidget(error),
-          AsyncLoading() => const Center(child: CircularProgressIndicator()),
-          _ => const SizedBox(),
-        };
-      case AsyncError(:final error):
-        return ErrorWidget(error);
-      case _:
-        return const Center(child: CircularProgressIndicator());
-    }
+    return switch (mintQuoteAsync) {
+      AsyncData(value: final result) => switch (result) {
+          Ok(value: final mintQuote) =>
+            _buildWidget(context, mintQuote: mintQuote),
+          Failure(failure: final failure) => ErrorCard(
+              message: 'Unable to create an invoice.',
+              details: failure.toString(),
+              onRetry: () => ref.invalidate(mintQuoteProvider),
+            ),
+        },
+      AsyncError(:final error) => ErrorCard(
+          message: 'Unable to create an invoice.',
+          details: error.toString(),
+          onRetry: () => ref.invalidate(mintQuoteProvider),
+        ),
+      AsyncLoading() => const Center(child: CircularProgressIndicator()),
+      _ => const SizedBox(),
+    };
   }
 
   Widget _buildWidget(

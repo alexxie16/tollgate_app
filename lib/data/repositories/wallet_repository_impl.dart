@@ -145,16 +145,14 @@ class WalletRepositoryImpl extends WalletRepository {
         return;
       }
 
-      yield* mintWallet
-          .mint(amount: amount.value, description: description)
-          .map<Result<MintQuote, MintQuoteStreamFailure>>(
-              (quote) => Result.ok(quote))
-          .handleError((error, stackTrace) {
-        // Yield a failure result
-        return Result.failure(MintQuoteStreamFailure.unexpected(error));
-      });
-    } catch (e) {
-      yield Result.failure(MintQuoteStreamFailure.unexpected(e));
+      await for (final quote
+          in mintWallet.mint(amount: amount.value, description: description)) {
+        yield Result.ok(quote);
+      }
+    } catch (e, stackTrace) {
+      yield Result.failure(
+        MintQuoteStreamFailure.unexpected(e, stackTrace: stackTrace),
+      );
     }
   }
 }

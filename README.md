@@ -7,6 +7,8 @@ Flutter mobile application for discovering TollGate Wi-Fi networks and paying fo
 - Android debug build verified locally with `flutter build apk --debug`
 - Android emulator launch and app install verified locally with `flutter run -d emulator-5554 --debug --no-resident`
 - Android phone sideload verified locally with `adb install -r build/app/outputs/flutter-apk/app-debug.apk`
+- Wallet mint configuration flow now exists in-app under Settings
+- Default wallet mint is Minibits at `https://mint.minibits.cash/Bitcoin`, with support for custom mint URLs
 - Primary supported build target is Android
 - iOS/macOS toolchain can be configured, but the app's Wi-Fi connection flow is Android-first
 
@@ -16,6 +18,7 @@ This repo now depends on in-repo submodules and local package overrides:
 
 - `cdk_flutter/`: Cashu Flutter bindings and Rust bridge
 - `third_party/WiFiFlutter/`: vendored source for `wifi_scan` and `wifi_iot`
+- `CHANGELOG.md`: repo-level attempt log for app changes and verification work
 
 Clone with submodules:
 
@@ -108,6 +111,44 @@ Output:
 build/app/outputs/flutter-apk/app-debug.apk
 ```
 
+## Wallet Mint MVP
+
+### Default mint
+
+If no mint has been configured yet, the app now defaults to the Minibits mint:
+
+```text
+https://mint.minibits.cash/Bitcoin
+```
+
+That URL was validated against the mint info endpoint:
+
+```text
+https://mint.minibits.cash/Bitcoin/v1/info
+```
+
+### Configure or change mint
+
+1. Open `Settings`.
+2. Use `Use Default Minibits Mint` for the default path, or enter another Cashu mint URL.
+3. Tap `Save Mint`.
+4. Use the `Configured Mints` list to switch between already-added mints.
+
+### Mint funds
+
+1. Open `Wallet`.
+2. Open `Mint`.
+3. Enter the amount in sats.
+4. Tap `Create Invoice`.
+5. Pay the displayed Lightning invoice externally.
+6. When the mint quote reaches `issued`, the invoice screen closes and the wallet balance should refresh.
+
+### Current verification state
+
+- The mint configuration flow, mint screen validation, and invoice error handling are implemented.
+- Android build and runtime smoke tests were rerun after these changes.
+- End-to-end balance update after paying a real invoice still requires manual payment verification.
+
 ### Run on Android device or emulator
 
 List devices:
@@ -134,10 +175,18 @@ Or target a connected Android device explicitly:
 flutter run -d <android-device-id>
 ```
 
-Sideload an already-built debug APK onto a connected Android phone:
+### Run on a physical Android device
+
+Check that the phone is visible:
 
 ```bash
 adb devices -l
+flutter devices
+```
+
+Sideload an already-built debug APK onto a connected Android phone:
+
+```bash
 adb install -r build/app/outputs/flutter-apk/app-debug.apk
 ```
 
@@ -154,6 +203,13 @@ If `flutter build apk --debug` fails with `Unable to locate a Java Runtime`, con
 ```bash
 flutter config --jdk-dir="/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home"
 ```
+
+If the wallet says no mint is configured, open `Settings` and either:
+
+- tap `Use Default Minibits Mint`, or
+- paste another valid Cashu mint URL and tap `Save Mint`
+
+If invoice creation fails, verify that the configured mint URL is reachable and supports Cashu minting, then retry from the Mint screen.
 
 If `flutter devices` shows an unwanted iPhone local-network warning on macOS, that is usually caused by an existing Xcode/CoreDevice pairing on the host, not by this repo. Removing the stale pairing stops Flutter from probing that device:
 
