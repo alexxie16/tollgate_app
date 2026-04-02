@@ -6,8 +6,6 @@ abstract final class Routes {
   static const scan = '/scan';
   static const connection = '/connection';
   static const payment = '/payment';
-  static const mint = '/wallet/mint';
   static const send = '/wallet/send';
   static const receive = '/wallet/receive';
-  static const reserve = '/wallet/reserve';
 }

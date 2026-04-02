@@ -37,6 +37,10 @@ class HomeScreen extends HookConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _buildHeader(context),
+                  if (!hasInternet) ...[
+                    _buildOfflineNotice(context),
+                    const SizedBox(height: 20),
+                  ],
                   // Connection Status Card
                   _buildWifiConnectionSection(
                     context,
@@ -53,7 +57,34 @@ class HomeScreen extends HookConsumerWidget {
           ),
         ),
       ),
-      error: (error, stack) => Text('Error: $error'),
+      error: (error, stack) => Scaffold(
+        extendBodyBehindAppBar: true,
+        body: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 10.0),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _buildHeader(context),
+                  _buildOfflineNotice(context,
+                      message:
+                          'The app could not refresh the current connection state. Local wallet features still work offline.'),
+                  const SizedBox(height: 20),
+                  ConnectionStatusCard(
+                    connectionInfo: null,
+                    hasInternet: hasInternet,
+                    isTollGate: false,
+                  ),
+                  const SizedBox(height: 30),
+                  const WalletCard(),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
       loading: () => const Center(
         child: CircularProgressIndicator(),
       ),
@@ -84,6 +115,31 @@ class HomeScreen extends HookConsumerWidget {
             textAlign: TextAlign.center,
             style: context.textTheme.titleMedium?.copyWith(
               color: context.colorScheme.onSurface.withAlpha(150),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOfflineNotice(BuildContext context,
+      {String message =
+          'Internet is currently unavailable. Local eCash and TollGate payment can still work with already stored tokens.'}) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: context.colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.cloud_off_rounded, color: context.colorScheme.primary),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              message,
+              style: context.textTheme.bodyMedium,
             ),
           ),
         ],

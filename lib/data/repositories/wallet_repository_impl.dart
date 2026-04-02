@@ -150,13 +150,9 @@ class WalletRepositoryImpl extends WalletRepository {
     String? description,
   }) async* {
     try {
-      final mintWallet =
-          await walletDataSource.wallet.getWallet(mintUrl: mint.url);
-
-      if (mintWallet == null) {
-        yield Result.failure(MintQuoteStreamFailure.mintNotFound(mint.url));
-        return;
-      }
+      final mintWallet = await walletDataSource.wallet.createOrGetWallet(
+        mintUrl: mint.url,
+      );
 
       await for (final quote
           in mintWallet.mint(amount: amount.value, description: description)) {

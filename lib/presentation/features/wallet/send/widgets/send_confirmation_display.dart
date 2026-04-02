@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:tollgate_app/presentation/common/extensions/build_context_x.dart';
 import 'package:tollgate_app/presentation/common/widgets/buttons/app_button.dart';
 
@@ -17,8 +16,6 @@ class SendConfirmationDisplay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final totalAmount = state.preparedSend.amount + state.preparedSend.fee;
-
     return Card(
       elevation: 0,
       color: context.colorScheme.surface,
@@ -41,17 +38,12 @@ class SendConfirmationDisplay extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 24),
-            _buildDetailRow(context, 'Amount:',
-                '${state.preparedSend.amount.toString()} sats'),
-            const SizedBox(height: 8),
             _buildDetailRow(
-                context, 'Fee:', '${state.preparedSend.fee.toString()} sats'),
-            const Divider(height: 32),
-            _buildDetailRow(
-              context,
-              'Total:',
-              '${totalAmount.toString()} sats',
-              isTotal: true,
+                context, 'Amount:', '${state.amount.value.toString()} sats'),
+            const SizedBox(height: 12),
+            Text(
+              'The app will split the stored local eCash token offline and keep the remainder locally.',
+              style: context.textTheme.bodyMedium,
             ),
             const SizedBox(height: 32),
             AppButton(
@@ -67,7 +59,7 @@ class SendConfirmationDisplay extends StatelessWidget {
               label: 'Cancel',
               variant: AppButtonVariant.destructive,
               onPressed: () {
-                context.pop(); // Go back to editing state
+                sendScreenNotifier.backToEditing();
               },
             ),
           ],
@@ -76,11 +68,8 @@ class SendConfirmationDisplay extends StatelessWidget {
     );
   }
 
-  Widget _buildDetailRow(BuildContext context, String label, String value,
-      {bool isTotal = false}) {
-    final textStyle = isTotal
-        ? context.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)
-        : context.textTheme.bodyLarge;
+  Widget _buildDetailRow(BuildContext context, String label, String value) {
+    final textStyle = context.textTheme.bodyLarge;
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,

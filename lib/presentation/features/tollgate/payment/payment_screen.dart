@@ -250,7 +250,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
             const _InfoCard(
               title: 'Offline payment',
               message:
-                  'TollGate top-up splits the reserved local eCash token offline, then sends the selected raw Cashu token directly to the router. Reserve local eCash first so the app can reissue it into many 1 sat proofs while online.',
+                  'TollGate top-up splits the active local eCash token offline, then sends the selected raw Cashu token directly to the router. If exact splits fail, swap your regular eCash into swapped eCash from the wallet page first.',
               icon: Icons.offline_bolt_rounded,
             ),
             const SizedBox(height: 16),
@@ -267,9 +267,9 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: () => context.go(Routes.reserve),
-                    icon: const Icon(Icons.savings_outlined),
-                    label: const Text('Reserve eCash'),
+                    onPressed: () => context.go(Routes.receive),
+                    icon: const Icon(Icons.download_rounded),
+                    label: const Text('Receive eCash'),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -545,7 +545,7 @@ class _LocalEcashCard extends StatelessWidget {
             data: (token) {
               if (token == null) {
                 return Text(
-                  'No reserved local eCash token stored. Use Reserve eCash before trying to buy internet offline.',
+                  'No local eCash token stored. Use Receive before trying to buy internet offline.',
                   style: context.textTheme.bodyMedium?.copyWith(
                     color: context.colorScheme.error,
                   ),

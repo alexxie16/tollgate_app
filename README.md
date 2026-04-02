@@ -9,11 +9,13 @@ Flutter mobile application for discovering TollGate Wi-Fi networks and paying fo
 - Android phone sideload verified locally with `adb install -r build/app/outputs/flutter-apk/app-debug.apk`
 - Wallet mint configuration flow now exists in-app under Settings
 - Default wallet mint is Minibits at `https://mint.minibits.cash/Bitcoin`, with support for custom mint URLs
-- Wallet `Receive` action now opens a real Cashu token receive flow
-- Wallet `Recent Transactions` now loads actual wallet transactions from the Cashu/CDK wallet history
+- Wallet home is now simplified to `Send` and `Receive` only
+- Wallet `Receive` now supports both pasted Cashu tokens and invoice creation, and stores the result as regular local eCash
+- Wallet `Send` now prefers swapped local eCash for exact offline splits and falls back to regular local eCash when needed
+- Wallet home now shows both regular eCash and swapped eCash, with a manual `Swap All` action to convert regular eCash into swapped `1 sat` proofs
 - Available TollGate network scan cards no longer show fake random `sats/min`; live pricing is only shown after connecting to a TollGate
 - TollGate SSIDs can now be connected from the home and scan flows, then load live pricing from `http://172.19.217.1:2121`
-- TollGate top-up now uses a reserved local eCash token that the app tries to reissue into many `1 sat` proofs while online, then splits it offline and submits the selected raw token to `POST http://172.19.217.1:2121/`
+- TollGate top-up now uses the one stored local eCash token, splits it offline, and submits the selected raw token to `POST http://172.19.217.1:2121/`
 - The app does not require showing a captive-portal UI to the user for the current TollGate payment flow
 - Primary supported build target is Android
 - iOS/macOS toolchain can be configured, but the app's Wi-Fi connection flow is Android-first
@@ -140,14 +142,15 @@ https://mint.minibits.cash/Bitcoin/v1/info
 3. Tap `Save Mint`.
 4. Use the `Configured Mints` list to switch between already-added mints.
 
-### Mint funds
+### Create an invoice
 
 1. Open `Wallet`.
-2. Open `Mint`.
-3. Enter the amount in sats.
-4. Tap `Create Invoice`.
-5. Pay the displayed Lightning invoice externally.
-6. When the mint quote reaches `issued`, the invoice screen closes and the wallet balance should refresh.
+2. Open `Receive`.
+3. Switch to `Create Invoice`.
+4. Enter the amount in sats.
+5. Tap `Create Invoice`.
+6. Pay the displayed Lightning invoice externally.
+7. Once the mint quote reaches `issued`, the app converts the minted amount into the stored local eCash token.
 
 ### Current verification state
 
@@ -157,35 +160,38 @@ https://mint.minibits.cash/Bitcoin/v1/info
 
 ## Wallet Actions
 
-### Reserve local eCash for TollGate
-
-1. Open `Wallet`.
-2. Open `Reserve`.
-3. Enter the sats amount you want to carry offline for TollGate.
-4. Confirm the reserve action while the mint is reachable.
-5. The app temporarily exports that amount from the main wallet, re-receives it through the mint using a `1 sat` proof target, then stores the final token locally for TollGate use.
-
-Implementation notes:
-
-- This reserve flow is TollGate-specific and keeps the normal wallet mint/send flows unchanged.
-- The app persists one local eCash token for TollGate at a time.
-- If a previous reserve attempt already has pending balance in the reserve wallet, the app exports that balance before trying to create a new reserved token.
-
-### Receive a Cashu token
+### Receive a Cashu token or invoice
 
 1. Open `Wallet`.
 2. Tap `Receive`.
-3. Paste a Cashu token string such as `cashuA...`.
-4. Tap `Receive`.
-5. The app redeems the token into the wallet and switches the current mint to the token mint if needed.
+3. Either paste a Cashu token string such as `cashuA...`, or switch to `Create Invoice` and mint funds through the current mint.
+4. Complete the chosen receive flow.
+5. The app stores the resulting value as regular local eCash for later send, swap, and TollGate use.
 
-### Recent transactions
+Implementation notes:
 
-The `Recent Transactions` section on the wallet screen now reads real transaction history from the underlying Cashu wallet instead of showing a placeholder list.
+- One regular local token and one swapped local token are supported for now.
+- If a regular token is already stored, the app asks you to send, spend, clear, or swap it before receiving another regular token.
+- Creating an invoice requires internet and mint access. The wallet and TollGate still work partially offline with an already stored local token.
+- Swapping regular eCash into swapped eCash is a manual wallet action and requires internet plus mint connectivity.
 
-- Incoming entries cover successful minting and received tokens.
-- Outgoing entries cover send and reserve actions.
-- Transaction data comes from the wallet backend via `listTransactions()`.
+### Send a Cashu token
+
+1. Open `Wallet`.
+2. Tap `Send`.
+3. Enter the sats amount you want to export.
+4. Confirm the amount.
+5. The app splits the stored local eCash token offline, keeps the remainder locally, and shows the outgoing token as QR/text.
+
+### Balance model
+
+The wallet home now shows local eCash buckets, not a combined mint-backed account balance.
+
+- `Receive` prepares regular local eCash.
+- `Swap All` converts regular local eCash into swapped local eCash with `1 sat` proofs.
+- `Send` and TollGate payment prefer swapped local eCash because it is easier to split exactly offline.
+- The wallet page also shows pending hidden-wallet balances left from earlier swap attempts and lets you recover them into swapped eCash.
+- The app no longer exposes `Reserve` or `Melt` in the wallet UI.
 
 ## TollGate Pricing And Payment
 
@@ -222,17 +228,16 @@ The TollGate screen now performs a real offline local-eCash top-up flow:
 1. Connect to a TollGate SSID from the home screen or scan screen.
 2. Load live pricing from `http://172.19.217.1:2121`.
 3. Choose a package derived from the router's advertised data step size, or enter a custom amount in MB.
-4. Use the already reserved local eCash token stored in the app.
+4. Use the active local eCash token already saved in the app.
 5. Split that token locally into the selected amount when the proof set allows an exact offline split.
 6. Submit the selected token to the router with `POST http://172.19.217.1:2121/` using the raw Cashu token string as the request body.
 
 Implementation notes:
 
-- The screen shows the reserved local eCash balance before attempting a top-up.
+- The screen shows the active local eCash balance before attempting a top-up.
 - The preset top-up packages are built from the router's step size, such as `21 MB`, `105 MB`, and `210 MB` when one step equals `21 MB`.
-- The TollGate purchase flow does not call the mint at payment time; it only posts the stored local token to the router endpoint.
-- The reserve flow now tries to reissue the token through the mint into many `1 sat` proofs before storing it, so later offline splits are much more likely to succeed.
-- If the token still cannot be split exactly into the selected amount, the app fails locally and asks you to reserve again while online.
+- The TollGate purchase flow does not call the mint at payment time; it only posts the selected local token slice to the router endpoint.
+- If a regular token cannot be split exactly into the selected amount, swap it into swapped eCash from the wallet page first.
 - The payment request posts the raw Cashu token body directly to the router endpoint instead of wrapping it in JSON.
 - The app logs the router payment URL, request payload, and HTTP response in debug output to help with on-device testing.
 - Android cleartext HTTP is enabled because the router APIs are local `http://` endpoints.

@@ -117,16 +117,20 @@ class TollgateInteractor {
       return Result.failure('Enter an amount greater than 0 sats.');
     }
 
-    final localToken = await ref.read(ecashLocalTokenStreamProvider.future);
+    final swappedToken =
+        await ref.read(swappedEcashLocalTokenStreamProvider.future);
+    final regularToken =
+        await ref.read(regularEcashLocalTokenStreamProvider.future);
+    final localToken = swappedToken ?? regularToken;
     if (localToken == null) {
       return Result.failure(
-        'No reserved local eCash token is available. Reserve local eCash in the wallet before buying TollGate access offline.',
+        'No local eCash token is available. Receive a token into the app before buying TollGate access offline.',
       );
     }
 
     if (localToken.amount < BigInt.from(amountSats)) {
       return Result.failure(
-        'The reserved local eCash token only has ${localToken.amount} sats, but this selection needs $amountSats sats.',
+        'The stored local eCash token only has ${localToken.amount} sats, but this selection needs $amountSats sats.',
       );
     }
 
@@ -138,7 +142,7 @@ class TollgateInteractor {
       );
     } catch (_) {
       return Result.failure(
-        'The reserved local eCash token cannot be split exactly into $amountSats sats offline. Reserve again while online so the app can reissue smaller proofs first.',
+        'The active local eCash token cannot be split exactly into $amountSats sats offline. Swap your regular eCash into swapped eCash first from the wallet page.',
       );
     }
 
@@ -153,14 +157,19 @@ class TollgateInteractor {
     switch (paymentResult) {
       case Ok(value: final paymentResponse):
         final remainder = splitResult.remainder;
-        if (remainder == null) {
-          await ref.read(ecashLocalStorageProvider).clearLocalEcash();
+        if (swappedToken != null) {
+          if (remainder == null) {
+            await ref.read(clearSwappedEcashProvider.future);
+          } else {
+            await ref.read(storeSwappedEcashProvider(remainder.encoded).future);
+          }
         } else {
-          await ref.read(ecashLocalStorageProvider).storeLocalEcash(
-                remainder.encoded,
-              );
+          if (remainder == null) {
+            await ref.read(clearLocalEcashProvider.future);
+          } else {
+            await ref.read(storeLocalEcashProvider(remainder.encoded).future);
+          }
         }
-        ref.invalidate(ecashLocalTokenStreamProvider);
         return Result.ok(
           TollgateTopUpResult(
             token: token,

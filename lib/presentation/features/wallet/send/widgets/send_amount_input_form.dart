@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:tollgate_app/presentation/common/extensions/build_context_x.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:tollgate_app/presentation/common/extensions/build_context_x.dart';
 
 import '../../../../../core/result/result.dart';
 import '../../../../../domain/wallet/value_objects/send_amount.dart';
@@ -47,6 +47,11 @@ class SendAmountInputForm extends HookWidget {
                 style: context.textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.bold,
                 ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'This screen sends from the single local eCash token stored in the app.',
+                style: context.textTheme.bodyMedium,
               ),
               const Divider(),
               Container(
@@ -127,6 +132,15 @@ class SendAmountInputForm extends HookWidget {
                   ],
                 ),
               ),
+              if (state.error != null) ...[
+                const SizedBox(height: 12),
+                Text(
+                  state.error!,
+                  style: context.textTheme.bodySmall?.copyWith(
+                    color: context.colorScheme.error,
+                  ),
+                ),
+              ],
               const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
@@ -155,7 +169,7 @@ class SendAmountInputForm extends HookWidget {
                           ),
                         )
                       : const Text(
-                          'Submit',
+                          'Continue',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,

@@ -61,6 +61,51 @@
 - Added reserve wallet recovery behavior so an interrupted reserve attempt can export pending reserve balance on the next run instead of silently losing it.
 - Updated the TollGate payment copy and `README.md` to explain that reserve now tries to prepare many `1 sat` proofs while online, then splits and posts raw tokens offline.
 
+### Attempt 13 - Simplify wallet to Send and Receive only
+
+- Removed the `Reserve` route, screens, widgets, and related wallet-home UI so the app no longer exposes a separate reserve concept.
+- Removed the unused `Melt` wallet action and dropped the wallet-home recent-transactions section to keep the UI focused on the one stored local token model.
+- Simplified wallet home to show one local eCash balance plus only `Send` and `Receive` actions.
+- Reworked `Receive` so it now normalizes an incoming Cashu token into one stored local token using `1 sat` proof targeting when the mint is reachable.
+- Reworked `Send` so it now splits the stored local token offline, exports the selected amount as a Cashu token, and persists the remainder locally.
+- Renamed the hidden reserve-normalization wallet service to a local eCash wallet service and kept its existing database path so earlier normalized data remains recoverable.
+- Updated the home wallet summary card and TollGate payment copy to reference stored local eCash instead of reserve-specific wording.
+- Updated `README.md` to document the simplified wallet UX, the one-token storage model, and the new receive/send behavior.
+
+### Attempt 14 - Merge invoice creation into Receive and soften offline states
+
+- Merged the old invoice creation flow into the `Receive` page so the wallet now has one receive entry point for both pasted tokens and mint invoices.
+- Updated `Receive` so paid invoices are converted into the same stored local eCash token model instead of leaving minted funds only in the main wallet backend.
+- Kept `1 sat` proof normalization on both receive paths: pasted tokens and invoice-created funds.
+- Removed the standalone Mint route and deleted its now-unused screen/notifier files.
+- Improved Home and Wallet main-screen offline UX so they show informative offline notices and local-token fallbacks instead of harsh error states when internet is unavailable.
+- Updated `README.md` to document invoice creation from `Receive` and the app's partial offline behavior.
+
+### Attempt 15 - Launch-time auto-normalization of stored local eCash
+
+- Added a startup effect wrapper around the app so launch and connectivity-recovery events can trigger local eCash maintenance automatically.
+- Added a native `tokenIsOneSatProofs()` helper in `cdk_flutter` to detect whether a stored Cashu token is already normalized into `1 sat` proofs.
+- When the app launches with internet available and finds a stored local token that is not fully normalized, it now tries to normalize that token in the background before you use Send or TollGate.
+- Reused the local eCash wallet normalization service for both manual receive flows and automatic startup normalization.
+- Updated `README.md` to document the new launch-time background normalization behavior.
+
+### Attempt 16 - Manual recover and normalize actions for hidden local balances
+
+- Added hidden local-wallet balance inspection so the app can surface pending local eCash left behind by earlier receive or normalization attempts.
+- Added a manual `Normalize` action on the `Receive` page when the currently stored local token is not yet fully `1 sat` proofs.
+- Added per-mint `Recover` actions on the `Receive` page for pending hidden-wallet balances so stranded local eCash can be exported and normalized into the app's one stored token model.
+- Updated `README.md` to document the new manual recover and normalize controls.
+
+### Attempt 17 - Split local eCash into regular and swapped buckets
+
+- Removed launch-time auto-normalization and removed receive-time automatic normalization of incoming tokens.
+- Changed `Receive` so pasted tokens and invoice-created tokens are now stored as regular local eCash exactly as received.
+- Split local storage into regular eCash and swapped eCash buckets while keeping the old `ecash_encoded` storage key as the regular bucket for backward compatibility.
+- Updated `Send` and TollGate payment to prefer swapped eCash for exact offline splits, then fall back to regular eCash when needed.
+- Added a `Swap All Regular eCash` action on the wallet page that uses the hidden local wallet and the mint-backed swap/receive flow to convert regular eCash into swapped `1 sat` proofs.
+- Added pending hidden-wallet balance recovery to the wallet page so stranded balances from earlier attempts can be recovered into swapped eCash.
+- Updated `README.md` to document the new regular-vs-swapped eCash model and the manual swap workflow.
+
 ## 2026-04-01
 
 ### Attempt 1 - Android build and device verification
