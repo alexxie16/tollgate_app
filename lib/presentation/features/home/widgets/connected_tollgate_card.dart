@@ -77,7 +77,7 @@ class ConnectedTollgateCard extends ConsumerWidget {
                 Expanded(
                   child: AppButton(
                     variant: AppButtonVariant.secondary,
-                    label: 'Top Up',
+                    label: 'Review Pricing',
                     onPressed: () {
                       context.push('${Routes.home}payment', extra: {
                         'ssid': ssid,
@@ -115,17 +115,5 @@ class ConnectedTollgateCard extends ConsumerWidget {
         ],
       ),
     );
-  }
-
-  String _formatStepSize(int seconds) {
-    if (seconds >= 3600) {
-      final hours = seconds / 3600;
-      return '${hours.toStringAsFixed(1)} hour${hours != 1 ? 's' : ''}';
-    }
-    if (seconds >= 60) {
-      final minutes = seconds ~/ 60;
-      return '$minutes minute${minutes != 1 ? 's' : ''}';
-    }
-    return '$seconds second${seconds != 1 ? 's' : ''}';
   }
 }

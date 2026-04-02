@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io' show Platform;
-import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:tollgate_app/core/result/unit.dart';
@@ -16,7 +15,6 @@ import '../permissions/permissions_service.dart';
 /// Service to interact with Wi-Fi networks
 class WifiService {
   final PermissionsService _permissionsService = PermissionsService();
-  final Random _random = Random();
 
   /// Gets information about the current WiFi connection
   Future<Result<WifiConnectionInfo?, WifiGetCurrentConnectionError>>
@@ -90,8 +88,6 @@ class WifiService {
             frequency: ap.frequency,
             securityType: _getSecurityType(ap.capabilities),
             isTollGate: isTollGate,
-            // Only add price for TollGate networks
-            satsPerMin: isTollGate ? (5 + _random.nextInt(26)) : null,
           ),
         );
       }

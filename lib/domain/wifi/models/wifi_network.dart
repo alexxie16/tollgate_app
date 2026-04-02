@@ -117,6 +117,6 @@ class WiFiNetwork {
 
   @override
   String toString() {
-    return 'WiFiNetwork(ssid: $ssid, isTollGate: $isTollGate, price: ${satsPerMin ?? "N/A"} sats/min)';
+    return 'WiFiNetwork(ssid: $ssid, isTollGate: $isTollGate, price: ${satsPerMin?.toString() ?? "unknown"})';
   }
 }

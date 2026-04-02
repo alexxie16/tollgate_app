@@ -22,6 +22,11 @@ class NetworkCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final pricingText = network.isTollGate
+        ? network.satsPerMin != null
+            ? '${network.satsPerMin} sats/min'
+            : 'Pricing available after connect'
+        : network.securityType;
 
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
@@ -73,7 +78,7 @@ class NetworkCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '${network.satsPerMin} sats/min',
+                    pricingText,
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: colorScheme.onSurfaceVariant,
                     ),

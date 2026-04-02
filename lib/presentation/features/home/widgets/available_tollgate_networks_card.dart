@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:tollgate_app/core/result/result.dart';
 import 'package:tollgate_app/presentation/common/extensions/async_value_x.dart';
 import 'package:tollgate_app/presentation/common/extensions/build_context_x.dart';
+import 'package:tollgate_app/presentation/common/widgets/snackbar/app_snackbar.dart';
 import '../../../../domain/wifi/models/wifi_network.dart';
 import '../../wifi/providers/scan_networks_stream_provider.dart';
 import '../constants/home_constants.dart';
@@ -31,6 +33,25 @@ class AvailableTollgateNetworksCard extends ConsumerWidget {
     );
   }
 
+  Future<void> _connectToNetwork(
+    BuildContext context,
+    WidgetRef ref, {
+    required WiFiNetwork network,
+  }) async {
+    final result = await ref.read(connectToNetworkProvider(network).future);
+    if (!context.mounted) return;
+
+    switch (result) {
+      case Ok():
+        AppSnackBar.showSuccess(
+          context,
+          message: 'Connecting to ${network.ssid}',
+        );
+      case Failure(failure: final failure):
+        AppSnackBar.showError(context, message: failure.toString());
+    }
+  }
+
   Widget _buildCard(
     BuildContext context,
     WidgetRef ref, {
@@ -49,7 +70,7 @@ class AvailableTollgateNetworksCard extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: 8),
-        if (networks.isEmpty)
+        if (tollGateNetworks.isEmpty)
           Text(
             'No TollGate Networks Found',
             style: context.textTheme.bodyMedium?.copyWith(
@@ -60,9 +81,11 @@ class AvailableTollgateNetworksCard extends ConsumerWidget {
           ...tollGateNetworks.take(homeScreenMaxNetworksToShow).map(
                 (network) => NetworkCard(
                   network: network,
-                  onTap: () {
-                    ref.read(connectToNetworkProvider(network));
-                  },
+                  onTap: () => _connectToNetwork(
+                    context,
+                    ref,
+                    network: network,
+                  ),
                 ),
               ),
           if (tollGateNetworks.length > homeScreenMaxNetworksToShow)

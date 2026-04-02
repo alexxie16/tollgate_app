@@ -11,6 +11,8 @@ Flutter mobile application for discovering TollGate Wi-Fi networks and paying fo
 - Default wallet mint is Minibits at `https://mint.minibits.cash/Bitcoin`, with support for custom mint URLs
 - Wallet `Receive` action now opens a real Cashu token receive flow
 - Wallet `Recent Transactions` now loads actual wallet transactions from the Cashu/CDK wallet history
+- Available TollGate network scan cards no longer show fake random `sats/min`; live pricing is only shown after connecting to a TollGate
+- TollGate pricing review screen now uses real `TollGateInfo` data and the real wallet balance
 - Primary supported build target is Android
 - iOS/macOS toolchain can be configured, but the app's Wi-Fi connection flow is Android-first
 
@@ -169,6 +171,42 @@ The `Recent Transactions` section on the wallet screen now reads real transactio
 - Outgoing entries cover send and reserve actions.
 - Transaction data comes from the wallet backend via `listTransactions()`.
 
+## TollGate Pricing And Payment
+
+### Discovery pricing
+
+The app cannot know a TollGate's real price from a Wi-Fi scan alone.
+
+- Scanned TollGate SSIDs are now shown as `Pricing available after connect` until the app can fetch live router metadata.
+- Real pricing comes from `TollGateInfo` after connecting to a TollGate network and querying the router gateway.
+
+### Connected TollGate pricing
+
+When connected to a TollGate, the app reads pricing from the router metadata tags:
+
+- `metric`
+- `step_size`
+- `price_per_step`
+- `mint`
+
+The connected TollGate card and TollGate pricing screen now use that real metadata instead of mock `sats/min` values.
+
+### Payment flow status
+
+The TollGate pricing screen is now truthful, but the app still does **not** submit a real TollGate payment yet.
+
+- It shows live router pricing.
+- It shows the real wallet balance.
+- It estimates time package costs for time-based TollGate metrics.
+- It does not yet create/send the actual TollGate payment request to the router.
+
+### Live device testing status
+
+End-to-end testing against a real SSID such as `TollGate-A4PX-2.4GHz` requires a physical Android device connected over `adb`.
+
+- The Android emulator build/run path was verified after these changes.
+- A live Wi-Fi join and payment test could not be completed in this attempt because no physical Android phone was attached during the test pass.
+
 ### Run on Android device or emulator
 
 List devices:
@@ -236,6 +274,10 @@ If a received token fails to import, verify that:
 - the pasted value is a valid Cashu token string
 - the token has not already been spent
 - the mint referenced by the token is reachable
+
+If a scanned TollGate network does not show a price, that is expected until the device is actually connected and the router metadata has been fetched.
+
+If you want to validate a real TollGate SSID such as `TollGate-A4PX-2.4GHz`, attach a physical Android phone with `adb` and test from that device. The emulator cannot exercise real Wi-Fi association against nearby access points.
 
 If `flutter devices` shows an unwanted iPhone local-network warning on macOS, that is usually caused by an existing Xcode/CoreDevice pairing on the host, not by this repo. Removing the stale pairing stops Flutter from probing that device:
 

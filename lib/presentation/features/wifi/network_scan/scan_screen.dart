@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:tollgate_app/core/result/result.dart';
 import 'package:tollgate_app/presentation/common/extensions/async_value_x.dart';
 import 'package:tollgate_app/presentation/common/extensions/build_context_x.dart';
+import 'package:tollgate_app/presentation/common/widgets/snackbar/app_snackbar.dart';
 
+import '../../../../domain/wifi/models/wifi_network.dart';
+import '../providers/connect_to_network_provider.dart';
 import '../widgets/network_card.dart';
 import '../providers/scan_networks_stream_provider.dart';
 
@@ -16,6 +20,21 @@ class ScanScreen extends HookConsumerWidget {
     // Function to refresh the network list
     Future<void> refreshNetworks() async {
       ref.invalidate(scanNetworksStreamProvider);
+    }
+
+    Future<void> connectToNetwork(WiFiNetwork network) async {
+      final result = await ref.read(connectToNetworkProvider(network).future);
+      if (!context.mounted) return;
+
+      switch (result) {
+        case Ok():
+          AppSnackBar.showSuccess(
+            context,
+            message: 'Connecting to ${network.ssid}',
+          );
+        case Failure(failure: final failure):
+          AppSnackBar.showError(context, message: failure.toString());
+      }
     }
 
     return networksAsync.when(
@@ -55,8 +74,12 @@ class ScanScreen extends HookConsumerWidget {
                     context.colorScheme.primary,
                   ),
                   const SizedBox(height: 8),
-                  ...tollGateNetworks
-                      .map((network) => NetworkCard(network: network)),
+                  ...tollGateNetworks.map(
+                    (network) => NetworkCard(
+                      network: network,
+                      onTap: () => connectToNetwork(network),
+                    ),
+                  ),
                   const SizedBox(height: 16),
                 ],
 
@@ -68,8 +91,12 @@ class ScanScreen extends HookConsumerWidget {
                     context.colorScheme.onSurfaceVariant,
                   ),
                   const SizedBox(height: 8),
-                  ...regularNetworks
-                      .map((network) => NetworkCard(network: network)),
+                  ...regularNetworks.map(
+                    (network) => NetworkCard(
+                      network: network,
+                      onTap: () => connectToNetwork(network),
+                    ),
+                  ),
                 ],
               ],
             ),

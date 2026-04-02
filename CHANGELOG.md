@@ -38,3 +38,17 @@
 - Re-ran `flutter analyze` with no new analysis errors.
 - Re-ran `flutter build apk --debug` successfully.
 - Re-ran `flutter run -d emulator-5554 --debug --no-resident` successfully.
+
+### Attempt 5 - TollGate pricing truthfulness and runtime audit
+
+- Confirmed that scanned TollGate SSIDs were showing fake random pricing from `WifiService.scanNetworks()` instead of real router data.
+- Removed the fake random `satsPerMin` assignment from Wi-Fi scans.
+- Updated scanned network cards to show `Pricing available after connect` until live TollGate metadata is available.
+- Made scan-screen network cards tappable so they can trigger connection attempts directly.
+- Renamed the connected TollGate action from `Top Up` to `Review Pricing` to better reflect the current app behavior.
+- Replaced the old mock payment screen logic, which used a fake wallet balance and simulated successful payment, with a truthful live-pricing review screen.
+- The new TollGate pricing screen now reads real `TollGateInfo` pricing and the real wallet balance, and clearly states that actual TollGate payment submission is not implemented yet.
+- Re-ran `flutter analyze` with no new analysis errors.
+- Re-ran `flutter build apk --debug` successfully.
+- Re-ran `flutter run -d emulator-5554 --debug --no-resident` successfully.
+- Could not complete a live end-to-end test against `TollGate-A4PX-2.4GHz` in this attempt because only the Android emulator was attached; a physical Android device is still required for real Wi-Fi association testing.
