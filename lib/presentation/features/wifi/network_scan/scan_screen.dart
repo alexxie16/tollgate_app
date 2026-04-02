@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:tollgate_app/core/result/result.dart';
 import 'package:tollgate_app/presentation/common/extensions/async_value_x.dart';
 import 'package:tollgate_app/presentation/common/extensions/build_context_x.dart';
 import 'package:tollgate_app/presentation/common/widgets/snackbar/app_snackbar.dart';
+import 'package:tollgate_app/presentation/router/routes.dart';
 
 import '../../../../domain/wifi/models/wifi_network.dart';
+import '../../tollgate/interactors/tollgate_interactor.dart';
 import '../providers/connect_to_network_provider.dart';
 import '../widgets/network_card.dart';
 import '../providers/scan_networks_stream_provider.dart';
@@ -23,6 +26,27 @@ class ScanScreen extends HookConsumerWidget {
     }
 
     Future<void> connectToNetwork(WiFiNetwork network) async {
+      if (network.isTollGate) {
+        final result =
+            await TollgateInteractor(ref).connectAndLoadPricing(network);
+        if (!context.mounted) return;
+
+        switch (result) {
+          case Ok(value: final value):
+            AppSnackBar.showSuccess(
+              context,
+              message: 'Connected to ${network.ssid}',
+            );
+            context.push('${Routes.home}payment', extra: {
+              'ssid': value.connectionInfo.cleanSsid ?? network.ssid,
+              'tollgateInfo': value.tollgateInfo,
+            });
+          case Failure(failure: final failure):
+            AppSnackBar.showError(context, message: failure);
+        }
+        return;
+      }
+
       final result = await ref.read(connectToNetworkProvider(network).future);
       if (!context.mounted) return;
 

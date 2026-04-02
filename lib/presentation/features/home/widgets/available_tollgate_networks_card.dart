@@ -5,11 +5,12 @@ import 'package:tollgate_app/core/result/result.dart';
 import 'package:tollgate_app/presentation/common/extensions/async_value_x.dart';
 import 'package:tollgate_app/presentation/common/extensions/build_context_x.dart';
 import 'package:tollgate_app/presentation/common/widgets/snackbar/app_snackbar.dart';
+
 import '../../../../domain/wifi/models/wifi_network.dart';
+import '../../../router/routes.dart';
+import '../../tollgate/interactors/tollgate_interactor.dart';
 import '../../wifi/providers/scan_networks_stream_provider.dart';
 import '../constants/home_constants.dart';
-import '../../wifi/providers/connect_to_network_provider.dart';
-import '../../../router/routes.dart';
 import '../../wifi/widgets/network_card.dart';
 
 class AvailableTollgateNetworksCard extends ConsumerWidget {
@@ -38,17 +39,21 @@ class AvailableTollgateNetworksCard extends ConsumerWidget {
     WidgetRef ref, {
     required WiFiNetwork network,
   }) async {
-    final result = await ref.read(connectToNetworkProvider(network).future);
+    final result = await TollgateInteractor(ref).connectAndLoadPricing(network);
     if (!context.mounted) return;
 
     switch (result) {
-      case Ok():
+      case Ok(value: final value):
         AppSnackBar.showSuccess(
           context,
-          message: 'Connecting to ${network.ssid}',
+          message: 'Connected to ${network.ssid}',
         );
+        context.push('${Routes.home}payment', extra: {
+          'ssid': value.connectionInfo.cleanSsid ?? network.ssid,
+          'tollgateInfo': value.tollgateInfo,
+        });
       case Failure(failure: final failure):
-        AppSnackBar.showError(context, message: failure.toString());
+        AppSnackBar.showError(context, message: failure);
     }
   }
 

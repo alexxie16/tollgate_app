@@ -77,7 +77,7 @@ class ConnectedTollgateCard extends ConsumerWidget {
                 Expanded(
                   child: AppButton(
                     variant: AppButtonVariant.secondary,
-                    label: 'Review Pricing',
+                    label: 'Top Up',
                     onPressed: () {
                       context.push('${Routes.home}payment', extra: {
                         'ssid': ssid,

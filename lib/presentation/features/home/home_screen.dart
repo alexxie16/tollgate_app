@@ -5,6 +5,7 @@ import 'package:tollgate_app/presentation/common/extensions/async_value_x.dart';
 import 'package:tollgate_app/presentation/common/extensions/build_context_x.dart';
 import 'package:tollgate_app/presentation/common/providers/connectivity_stream_provider.dart';
 
+import '../../../domain/tollgate/constants/tollgate_constants.dart';
 import '../../../domain/wifi/models/wifi_connection_info.dart';
 import '../tollgate/providers/tollgate_providers.dart';
 import '../wifi/providers/current_connection_state_stream_provider.dart';
@@ -136,15 +137,8 @@ class HomeScreen extends HookConsumerWidget {
     required WifiConnectionInfo connectionInfo,
     required bool hasInternet,
   }) {
-    final routerIp = connectionInfo.gatewayIp;
-
-    if (routerIp == null) {
-      return ConnectedNonTollgateCard(
-        ssid: connectionInfo.ssid ?? 'Unknown Network',
-      );
-    }
-
-    final tollGateInfoAsync = ref.watch(tollgateInfoProvider(routerIp)).flatten;
+    final tollGateInfoAsync =
+        ref.watch(tollgateInfoProvider(kTollgateRouterIp)).flatten;
 
     return tollGateInfoAsync.when(
       data: (tollGateInfo) => ConnectedTollgateCard(

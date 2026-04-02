@@ -17,8 +17,6 @@ class ReserveConfirmationDisplay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final totalAmount = state.preparedSend.amount + state.preparedSend.fee;
-
     return Card(
       elevation: 0,
       color: context.colorScheme.surface,
@@ -41,27 +39,31 @@ class ReserveConfirmationDisplay extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 24),
-            _buildDetailRow(context, 'Amount:',
-                '${state.preparedSend.amount.toString()} sats'),
+            _buildDetailRow(
+                context, 'Amount:', '${state.amount.value.toString()} sats'),
             const SizedBox(height: 8),
-            _buildDetailRow(
-                context, 'Fee:', '${state.preparedSend.fee.toString()} sats'),
-            const Divider(height: 32),
-            _buildDetailRow(
-              context,
-              'Total:',
-              '${totalAmount.toString()} sats',
-              isTotal: true,
+            Text(
+              'The app will temporarily reissue this amount through the mint into many 1 sat proofs, then export the final local token for TollGate use.',
+              style: context.textTheme.bodyMedium,
             ),
             const SizedBox(height: 32),
             AppButton(
-              label: 'Reserve Token',
+              label: 'Reserve 1-sat Token',
               variant: AppButtonVariant.secondary,
               onPressed: () {
                 reserveScreenNotifier.generateAndStoreToken();
               },
               isLoading: state.isGeneratingToken,
             ),
+            if (state.error != null) ...[
+              const SizedBox(height: 12),
+              Text(
+                state.error!,
+                style: context.textTheme.bodySmall?.copyWith(
+                  color: context.colorScheme.error,
+                ),
+              ),
+            ],
             const SizedBox(height: 12),
             AppButton(
               label: 'Cancel',
@@ -76,11 +78,8 @@ class ReserveConfirmationDisplay extends StatelessWidget {
     );
   }
 
-  Widget _buildDetailRow(BuildContext context, String label, String value,
-      {bool isTotal = false}) {
-    final textStyle = isTotal
-        ? context.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)
-        : context.textTheme.bodyLarge;
+  Widget _buildDetailRow(BuildContext context, String label, String value) {
+    final textStyle = context.textTheme.bodyLarge;
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,

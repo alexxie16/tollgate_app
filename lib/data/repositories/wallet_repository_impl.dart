@@ -97,11 +97,9 @@ class WalletRepositoryImpl extends WalletRepository {
     bool? includeMemo,
   }) async {
     try {
-      final mintWallet =
-          await walletDataSource.wallet.getWallet(mintUrl: mint.url);
-      if (mintWallet == null) {
-        return Result.failure(PrepareSendFailure.mintNotFound(mint.url));
-      }
+      final mintWallet = await walletDataSource.wallet.createOrGetWallet(
+        mintUrl: mint.url,
+      );
       final preparedSend = await mintWallet.prepareSend(
         amount: amount.value,
       );
@@ -117,11 +115,9 @@ class WalletRepositoryImpl extends WalletRepository {
     required PreparedSend preparedSend,
   }) async {
     try {
-      final mintWallet =
-          await walletDataSource.wallet.getWallet(mintUrl: mint.url);
-      if (mintWallet == null) {
-        return Result.failure(SendFailure.mintNotFound(mint.url));
-      }
+      final mintWallet = await walletDataSource.wallet.createOrGetWallet(
+        mintUrl: mint.url,
+      );
 
       final token = await mintWallet.send(send: preparedSend);
       return Result.ok(token);

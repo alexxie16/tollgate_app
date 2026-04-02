@@ -1,6 +1,25 @@
 import 'package:tollgate_app/domain/tollgate/models/tollgate_info.dart';
 
 extension TollgateInfoX on TollGateInfo {
+  bool get isDataMetric =>
+      ['bytes', 'kilobytes', 'megabytes', 'gigabytes'].contains(
+        metric.toLowerCase(),
+      );
+
+  double get stepSizeInMegabytes {
+    return switch (metric.toLowerCase()) {
+      'bytes' => stepSize / (1024 * 1024),
+      'kilobytes' => stepSize / 1024,
+      'megabytes' => stepSize.toDouble(),
+      'gigabytes' => stepSize * 1024,
+      _ => stepSize.toDouble(),
+    };
+  }
+
+  String humanReadableDataAmount({required int steps}) {
+    return _formatMegabytes(stepSizeInMegabytes * steps);
+  }
+
   String humanReadablePrice() {
     final metric = this.metric.toLowerCase();
     final stepSize = this.stepSize;
@@ -39,33 +58,37 @@ extension TollgateInfoX on TollGateInfo {
     }
 
     // Handle data-based metrics
-    if (['bytes', 'kilobytes', 'megabytes', 'gigabytes'].contains(metric)) {
-      // Convert everything to MB for display
-      double megabytes = switch (metric) {
-        'bytes' => stepSize / (1024 * 1024),
-        'kilobytes' => stepSize / 1024,
-        'megabytes' => stepSize.toDouble(),
-        'gigabytes' => stepSize * 1024,
-        _ => stepSize.toDouble(),
-      };
-
-      // If less than 1 MB, show in KB
-      if (megabytes < 1) {
-        final kilobytes = (megabytes * 1024).round();
-        return '$pricePerStep sats/${kilobytes}KB';
-      }
-
-      // If more than 1024 MB, show in GB
-      if (megabytes >= 1024) {
-        final gigabytes = (megabytes / 1024).toStringAsFixed(1);
-        return '$pricePerStep sats/${gigabytes}GB';
-      }
-
-      // Show in MB
-      return '$pricePerStep sats/${megabytes.round()}MB';
+    if (isDataMetric) {
+      return '$pricePerStep sats/${_formatMegabytes(stepSizeInMegabytes)}';
     }
 
     // Unknown metric type
     return '$pricePerStep sats per $stepSize $metric';
+  }
+
+  String _formatMegabytes(double megabytes) {
+    if (megabytes < 1) {
+      final kilobytes = megabytes * 1024;
+      final wholeKilobytes = kilobytes.truncateToDouble() == kilobytes;
+      final label = wholeKilobytes
+          ? kilobytes.toStringAsFixed(0)
+          : kilobytes.toStringAsFixed(1);
+      return '${label}KB';
+    }
+
+    if (megabytes >= 1024) {
+      final gigabytes = megabytes / 1024;
+      final wholeGigabytes = gigabytes.truncateToDouble() == gigabytes;
+      final label = wholeGigabytes
+          ? gigabytes.toStringAsFixed(0)
+          : gigabytes.toStringAsFixed(1);
+      return '${label}GB';
+    }
+
+    final wholeMegabytes = megabytes.truncateToDouble() == megabytes;
+    final label = wholeMegabytes
+        ? megabytes.toStringAsFixed(0)
+        : megabytes.toStringAsFixed(1);
+    return '${label}MB';
   }
 }

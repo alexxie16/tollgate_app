@@ -1,22 +1,27 @@
 import 'dart:convert';
-import 'package:http/http.dart' as http;
+
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
+import 'package:tollgate_app/domain/tollgate/constants/tollgate_constants.dart';
 import 'package:tollgate_app/domain/tollgate/errors/tollgate_errors.dart';
+import 'package:tollgate_app/domain/tollgate/errors/tollgate_payment_submission_error.dart';
 
 import '../../../core/result/result.dart';
 import '../../../domain/tollgate/models/tollgate_info.dart';
+import '../../../domain/tollgate/models/tollgate_payment_response.dart';
 
 class TollgateService {
   final String _defaultPort;
 
-  TollgateService({String defaultPort = '2121'}) : _defaultPort = defaultPort;
+  TollgateService({String defaultPort = kTollgateInfoPort})
+      : _defaultPort = defaultPort;
 
   /// Fetches Tollgate information from the router
   ///
   /// [routerIp] is the IP address of the router, e.g., '192.168.1.1'
   /// [port] is optional and defaults to '2121'
   Future<Result<TollGateInfo, TollgateInfoRetrievalError>> getTollgateInfo(
-      {required String routerIp, String? port = '2121'}) async {
+      {required String routerIp, String? port = kTollgateInfoPort}) async {
     final targetPort = port ?? _defaultPort;
     final url = 'http://$routerIp:$targetPort';
 
@@ -49,7 +54,7 @@ class TollgateService {
   /// [routerIp] is the default gateway IP address
   /// Returns true if a Tollgate service is detected
   Future<Result<bool, TollgateInfoRetrievalError>> detectTollgate(
-      {required String routerIp, String? port = '2121'}) async {
+      {required String routerIp, String? port = kTollgateInfoPort}) async {
     final result = await getTollgateInfo(routerIp: routerIp, port: port);
 
     return result
@@ -63,5 +68,80 @@ class TollgateService {
             'Not a Tollgate network');
       },
     );
+  }
+
+  Future<Result<TollGatePaymentResponse, TollgatePaymentSubmissionError>>
+      submitEcashToken({
+    required String cashuToken,
+    String? authToken,
+    String routerIp = kTollgateRouterIp,
+    String port = kTollgatePaymentPort,
+  }) async {
+    final uri = Uri.parse('http://$routerIp:$port/');
+
+    try {
+      debugPrint('TollGate payment URL: $uri');
+      debugPrint('TollGate payment payload: $cashuToken');
+
+      final response = await http
+          .post(
+            uri,
+            headers: const {
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'Accept': 'application/json, text/plain, */*',
+            },
+            body: cashuToken,
+          )
+          .timeout(
+            const Duration(seconds: 8),
+            onTimeout: () => throw Exception('Connection timed out'),
+          );
+
+      debugPrint(
+          'TollGate payment response: ${response.statusCode} ${response.body}');
+
+      final parsedBody = _decodeJsonMap(response.body);
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        if (parsedBody != null) {
+          return Result.ok(TollGatePaymentResponse.fromJson(parsedBody));
+        }
+
+        return Result.ok(
+          TollGatePaymentResponse(
+            status: 'accepted',
+            raw: {'body': response.body},
+          ),
+        );
+      }
+
+      if (parsedBody != null) {
+        final paymentResponse = TollGatePaymentResponse.fromJson(parsedBody);
+        return Result.failure(
+          TollgatePaymentSubmissionError(paymentResponse.userMessage),
+        );
+      }
+
+      return Result.failure(
+        TollgatePaymentSubmissionError(
+          'TollGate payment failed: HTTP ${response.statusCode}',
+        ),
+      );
+    } catch (e) {
+      debugPrint('Error submitting TollGate payment to $uri: $e');
+      return Result.failure(
+        TollgatePaymentSubmissionError(
+          'Failed to submit the eCash token: ${e.toString()}',
+        ),
+      );
+    }
+  }
+
+  Map<String, dynamic>? _decodeJsonMap(String body) {
+    if (body.trim().isEmpty) {
+      return null;
+    }
+
+    final decoded = jsonDecode(body);
+    return decoded is Map<String, dynamic> ? decoded : null;
   }
 }

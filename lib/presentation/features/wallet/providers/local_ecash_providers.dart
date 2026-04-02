@@ -22,3 +22,10 @@ Future<void> storeLocalEcash(Ref ref, String encoded) async {
   await ecashLocalStorage.storeLocalEcash(encoded);
   ref.invalidate(ecashLocalTokenStreamProvider);
 }
+
+@Riverpod(keepAlive: true)
+Future<void> clearLocalEcash(Ref ref) async {
+  final ecashLocalStorage = ref.watch(ecashLocalStorageProvider);
+  await ecashLocalStorage.clearLocalEcash();
+  ref.invalidate(ecashLocalTokenStreamProvider);
+}

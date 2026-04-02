@@ -1,13 +1,20 @@
+import 'package:cdk_flutter/cdk_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:tollgate_app/core/result/result.dart';
+import 'package:tollgate_app/presentation/common/extensions/async_value_x.dart';
 import 'package:tollgate_app/presentation/common/extensions/build_context_x.dart';
 import 'package:tollgate_app/presentation/common/extensions/tollgate_info_x.dart';
 import 'package:tollgate_app/presentation/common/widgets/snackbar/app_snackbar.dart';
 import 'package:tollgate_app/presentation/router/routes.dart';
 
+import '../../../../domain/tollgate/constants/tollgate_constants.dart';
 import '../../../../domain/tollgate/models/tollgate_info.dart';
-import '../../wallet/providers/wallet_balance_stream_provider.dart';
+import '../../../../domain/tollgate/models/tollgate_payment_response.dart';
+import '../interactors/tollgate_interactor.dart';
+import '../providers/tollgate_providers.dart';
+import '../../wallet/providers/local_ecash_providers.dart';
 
 class PaymentScreen extends ConsumerStatefulWidget {
   final Map<String, dynamic>? networkData;
@@ -22,14 +29,18 @@ class PaymentScreen extends ConsumerStatefulWidget {
 }
 
 class _PaymentScreenState extends ConsumerState<PaymentScreen> {
-  int _selectedPackage = 1;
+  int _selectedPackage = 0;
+  bool _isSubmitting = false;
+  String? _sessionAuthToken;
+  int? _lastTopUpAmount;
+  TollGatePaymentResponse? _lastPaymentResponse;
   final TextEditingController _customAmountController = TextEditingController();
 
-  final List<_TimePackage> _packages = const [
-    _TimePackage(label: '5 mins', minutes: 5, icon: Icons.timelapse),
-    _TimePackage(label: '15 mins', minutes: 15, icon: Icons.timer),
-    _TimePackage(label: '1 hour', minutes: 60, icon: Icons.hourglass_bottom),
-    _TimePackage(label: 'Custom', minutes: null, icon: Icons.edit),
+  final List<_DataPackage> _packages = const [
+    _DataPackage(stepCount: 1, icon: Icons.sd_storage),
+    _DataPackage(stepCount: 5, icon: Icons.storage),
+    _DataPackage(stepCount: 10, icon: Icons.cloud_queue),
+    _DataPackage(stepCount: null, icon: Icons.edit),
   ];
 
   @override
@@ -43,53 +54,154 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     return tollgateInfo is TollGateInfo ? tollgateInfo : null;
   }
 
-  bool _supportsTimeMetric(TollGateInfo? tollgateInfo) {
-    if (tollgateInfo == null) {
-      return false;
+  bool _supportsDataMetric(TollGateInfo? tollgateInfo) {
+    return tollgateInfo?.isDataMetric ?? false;
+  }
+
+  int? _selectedCustomMegabytes() {
+    return int.tryParse(_customAmountController.text.trim());
+  }
+
+  String? _selectedDataAmountLabel(
+      TollGateInfo? tollgateInfo, int packageIndex) {
+    if (!_supportsDataMetric(tollgateInfo)) {
+      return null;
     }
 
-    return const ['milliseconds', 'seconds', 'minutes', 'hours']
-        .contains(tollgateInfo.metric.toLowerCase());
+    if (packageIndex == _packages.length - 1) {
+      final megabytes = _selectedCustomMegabytes();
+      if (megabytes == null || megabytes <= 0) {
+        return null;
+      }
+      return _formatMegabytes(megabytes.toDouble());
+    }
+
+    final stepCount = _packages[packageIndex].stepCount;
+    if (stepCount == null) {
+      return null;
+    }
+
+    return tollgateInfo!.humanReadableDataAmount(steps: stepCount);
   }
 
   int? _packagePrice(TollGateInfo? tollgateInfo, int packageIndex) {
-    if (packageIndex == 3) {
-      return int.tryParse(_customAmountController.text.trim());
-    }
-
-    if (!_supportsTimeMetric(tollgateInfo)) {
+    if (!_supportsDataMetric(tollgateInfo)) {
       return null;
     }
 
-    final minutes = _packages[packageIndex].minutes;
-    if (minutes == null) {
+    if (packageIndex == _packages.length - 1) {
+      final megabytes = _selectedCustomMegabytes();
+      if (megabytes == null || megabytes <= 0) {
+        return null;
+      }
+
+      final price = tollgateInfo!.calculatePrice(megabytes: megabytes);
+      return price > 0 ? price : null;
+    }
+
+    final stepCount = _packages[packageIndex].stepCount;
+    if (stepCount == null) {
       return null;
     }
 
-    return tollgateInfo!.calculatePrice(minutes: minutes);
+    return tollgateInfo!.pricePerStep * stepCount;
   }
 
-  Future<void> _showPaymentUnavailable(TollGateInfo? tollgateInfo) async {
-    final message = tollgateInfo == null
-        ? 'Connect to a TollGate network first to load live pricing.'
-        : 'Live pricing is loaded, but TollGate payment submission is not implemented in the app yet.';
-    AppSnackBar.showInfo(context, message: message);
+  String _formatMegabytes(double megabytes) {
+    if (megabytes >= 1024) {
+      final gigabytes = megabytes / 1024;
+      final wholeGigabytes = gigabytes.truncateToDouble() == gigabytes;
+      final label = wholeGigabytes
+          ? gigabytes.toStringAsFixed(0)
+          : gigabytes.toStringAsFixed(1);
+      return '$label GB';
+    }
+
+    final wholeMegabytes = megabytes.truncateToDouble() == megabytes;
+    final label = wholeMegabytes
+        ? megabytes.toStringAsFixed(0)
+        : megabytes.toStringAsFixed(1);
+    return '$label MB';
+  }
+
+  Future<void> _submitTopUp(
+      TollGateInfo? tollgateInfo, int? selectedPrice) async {
+    if (_isSubmitting) {
+      return;
+    }
+
+    if (tollgateInfo == null) {
+      AppSnackBar.showError(
+        context,
+        message: 'Connect to a TollGate network first to load live pricing.',
+      );
+      return;
+    }
+
+    if (selectedPrice == null || selectedPrice <= 0) {
+      AppSnackBar.showError(
+        context,
+        message: 'Choose a valid top-up amount first.',
+      );
+      return;
+    }
+
+    setState(() {
+      _isSubmitting = true;
+    });
+
+    final result = await TollgateInteractor(ref).topUp(
+      tollgateInfo: tollgateInfo,
+      amountSats: selectedPrice,
+      authToken: _sessionAuthToken,
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _isSubmitting = false;
+    });
+
+    switch (result) {
+      case Ok(value: final value):
+        setState(() {
+          _sessionAuthToken =
+              value.paymentResponse.authToken ?? _sessionAuthToken;
+          _lastTopUpAmount = value.amountSats;
+          _lastPaymentResponse = value.paymentResponse;
+        });
+        AppSnackBar.showSuccess(
+          context,
+          message: 'Submitted ${value.amountSats} sats to the TollGate.',
+        );
+      case Failure(failure: final failure):
+        AppSnackBar.showError(context, message: failure);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final networkData = widget.networkData ?? <String, dynamic>{};
-    final tollgateInfo = _extractTollgateInfo(networkData);
+    final providedTollgateInfo = _extractTollgateInfo(networkData);
+    final liveTollgateInfoAsync =
+        ref.watch(tollgateInfoProvider(kTollgateRouterIp)).flatten;
+    final tollgateInfo =
+        liveTollgateInfoAsync.valueOrNull ?? providedTollgateInfo;
     final ssid = networkData['ssid'] as String? ?? 'Unknown Network';
+    final selectedDataAmountLabel =
+        _selectedDataAmountLabel(tollgateInfo, _selectedPackage);
     final selectedPrice = _packagePrice(tollgateInfo, _selectedPackage);
-    final walletBalanceAsync = ref.watch(walletBalanceStreamProvider);
-    final walletBalance = walletBalanceAsync.valueOrNull ?? BigInt.zero;
-    final hasEnoughBalance =
-        selectedPrice != null && walletBalance >= BigInt.from(selectedPrice);
+    final localEcashAsync = ref.watch(ecashLocalTokenStreamProvider);
+    final localEcash = localEcashAsync.valueOrNull;
+    final localEcashBalance = localEcash?.amount ?? BigInt.zero;
+    final hasEnoughBalance = selectedPrice != null &&
+        localEcashBalance >= BigInt.from(selectedPrice);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('TollGate Pricing'),
+        title: const Text('TollGate Top Up'),
         centerTitle: false,
         elevation: 0,
       ),
@@ -103,63 +215,97 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
               tollgateInfo: tollgateInfo,
             ),
             const SizedBox(height: 16),
-            if (tollgateInfo == null)
+            if (liveTollgateInfoAsync.isLoading && tollgateInfo == null)
+              const Center(child: CircularProgressIndicator())
+            else if (tollgateInfo == null)
               const _InfoCard(
                 title: 'Pricing unavailable',
                 message:
-                    'This screen only shows live TollGate pricing when opened from a connected TollGate network.',
+                    'This screen loads live TollGate pricing from 172.19.217.1:2121 after the device connects to a TollGate Wi-Fi network.',
                 icon: Icons.info_outline,
               )
-            else if (!_supportsTimeMetric(tollgateInfo))
+            else if (!_supportsDataMetric(tollgateInfo))
               _InfoCard(
                 title: 'Metric not supported yet',
                 message:
-                    'The connected router bills in ${tollgateInfo.metric}. The app currently only supports time-based TollGate pricing review.',
+                    'The connected router bills in ${tollgateInfo.metric}. The app now expects data-based TollGate pricing in bytes, kilobytes, megabytes, or gigabytes.',
                 icon: Icons.warning_amber_rounded,
               )
             else
               _buildPackageSelector(tollgateInfo),
             const SizedBox(height: 16),
-            _WalletBalanceCard(
-              walletBalanceAsync: walletBalanceAsync,
+            _LocalEcashCard(
+              localEcashAsync: localEcashAsync,
               selectedPrice: selectedPrice,
               hasEnoughBalance: hasEnoughBalance,
             ),
             const SizedBox(height: 16),
             const _InfoCard(
-              title: 'Payment flow status',
+              title: 'Router API',
               message:
-                  'This screen now shows live router pricing and your real wallet balance, but it does not yet create or submit a real TollGate payment.',
-              icon: Icons.construction_rounded,
+                  'Pricing is fetched from 172.19.217.1:2121 and payment submits the raw Cashu token body to POST http://172.19.217.1:2121/.',
+              icon: Icons.router_rounded,
             ),
             const SizedBox(height: 16),
-            if (selectedPrice != null)
+            const _InfoCard(
+              title: 'Offline payment',
+              message:
+                  'TollGate top-up splits the reserved local eCash token offline, then sends the selected raw Cashu token directly to the router. Reserve local eCash first so the app can reissue it into many 1 sat proofs while online.',
+              icon: Icons.offline_bolt_rounded,
+            ),
+            const SizedBox(height: 16),
+            if (selectedPrice != null && selectedDataAmountLabel != null)
               Text(
-                'Selected amount: $selectedPrice sats',
+                'Selected top up: $selectedDataAmountLabel for $selectedPrice sats',
                 style: context.textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.bold,
                 ),
               ),
-            if (selectedPrice != null) const SizedBox(height: 12),
+            if (selectedPrice != null && selectedDataAmountLabel != null)
+              const SizedBox(height: 12),
             Row(
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: () => context.go(Routes.wallet),
-                    icon: const Icon(Icons.account_balance_wallet_outlined),
-                    label: const Text('Open Wallet'),
+                    onPressed: () => context.go(Routes.reserve),
+                    icon: const Icon(Icons.savings_outlined),
+                    label: const Text('Reserve eCash'),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: () => _showPaymentUnavailable(tollgateInfo),
-                    icon: const Icon(Icons.bolt),
-                    label: const Text('Check Payment'),
+                    onPressed: _isSubmitting ||
+                            tollgateInfo == null ||
+                            selectedPrice == null ||
+                            !hasEnoughBalance
+                        ? null
+                        : () => _submitTopUp(tollgateInfo, selectedPrice),
+                    icon: _isSubmitting
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.bolt),
+                    label: Text(
+                      _isSubmitting
+                          ? 'Submitting...'
+                          : selectedDataAmountLabel == null
+                              ? 'Top Up'
+                              : 'Top Up $selectedDataAmountLabel',
+                    ),
                   ),
                 ),
               ],
             ),
+            if (_lastPaymentResponse != null && _lastTopUpAmount != null) ...[
+              const SizedBox(height: 16),
+              _PaymentStatusCard(
+                amountSats: _lastTopUpAmount!,
+                paymentResponse: _lastPaymentResponse!,
+              ),
+            ],
           ],
         ),
       ),
@@ -171,7 +317,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Estimated Access Packages',
+          'Estimated Data Packages',
           style: context.textTheme.titleMedium?.copyWith(
             fontWeight: FontWeight.w600,
           ),
@@ -191,6 +337,10 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
             final package = _packages[index];
             final isSelected = _selectedPackage == index;
             final price = _packagePrice(tollgateInfo, index);
+            final label = package.stepCount == null
+                ? 'Custom'
+                : tollgateInfo.humanReadableDataAmount(
+                    steps: package.stepCount!);
 
             return InkWell(
               onTap: () {
@@ -224,7 +374,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      package.label,
+                      label,
                       style: context.textTheme.titleSmall?.copyWith(
                         fontWeight: FontWeight.bold,
                         color: isSelected
@@ -253,13 +403,13 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
             controller: _customAmountController,
             keyboardType: TextInputType.number,
             decoration: InputDecoration(
-              hintText: 'Enter amount in sats',
+              hintText: 'Enter amount in megabytes',
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
               contentPadding:
                   const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              suffixText: 'sats',
+              suffixText: 'MB',
             ),
             onChanged: (_) => setState(() {}),
           ),
@@ -269,15 +419,13 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   }
 }
 
-class _TimePackage {
-  const _TimePackage({
-    required this.label,
-    required this.minutes,
+class _DataPackage {
+  const _DataPackage({
+    required this.stepCount,
     required this.icon,
   });
 
-  final String label;
-  final int? minutes;
+  final int? stepCount;
   final IconData icon;
 }
 
@@ -354,14 +502,14 @@ class _NetworkSummaryCard extends StatelessWidget {
   }
 }
 
-class _WalletBalanceCard extends StatelessWidget {
-  const _WalletBalanceCard({
-    required this.walletBalanceAsync,
+class _LocalEcashCard extends StatelessWidget {
+  const _LocalEcashCard({
+    required this.localEcashAsync,
     required this.selectedPrice,
     required this.hasEnoughBalance,
   });
 
-  final AsyncValue<BigInt> walletBalanceAsync;
+  final AsyncValue<Token?> localEcashAsync;
   final int? selectedPrice;
   final bool hasEnoughBalance;
 
@@ -379,13 +527,13 @@ class _WalletBalanceCard extends StatelessWidget {
           Row(
             children: [
               Icon(
-                Icons.account_balance_wallet,
+                Icons.offline_bolt,
                 color: Colors.amber.shade700,
                 size: 20,
               ),
               const SizedBox(width: 8),
               Text(
-                'Wallet Balance',
+                'Local eCash',
                 style: context.textTheme.titleSmall?.copyWith(
                   fontWeight: FontWeight.w600,
                 ),
@@ -393,33 +541,56 @@ class _WalletBalanceCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          walletBalanceAsync.when(
-            data: (balance) => Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  '$balance sats',
-                  style: context.textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: selectedPrice == null || hasEnoughBalance
-                        ? context.colorScheme.primary
-                        : context.colorScheme.error,
+          localEcashAsync.when(
+            data: (token) {
+              if (token == null) {
+                return Text(
+                  'No reserved local eCash token stored. Use Reserve eCash before trying to buy internet offline.',
+                  style: context.textTheme.bodyMedium?.copyWith(
+                    color: context.colorScheme.error,
                   ),
-                ),
-                if (selectedPrice != null)
+                );
+              }
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        '${token.amount} sats',
+                        style: context.textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: selectedPrice == null || hasEnoughBalance
+                              ? context.colorScheme.primary
+                              : context.colorScheme.error,
+                        ),
+                      ),
+                      if (selectedPrice != null)
+                        Text(
+                          hasEnoughBalance
+                              ? 'Enough for selection'
+                              : 'Need $selectedPrice sats',
+                          style: context.textTheme.bodySmall?.copyWith(
+                            color: hasEnoughBalance
+                                ? context.colorScheme.primary
+                                : context.colorScheme.error,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
                   Text(
-                    hasEnoughBalance
-                        ? 'Enough for selection'
-                        : 'Need $selectedPrice sats',
-                    style: context.textTheme.bodySmall?.copyWith(
-                      color: hasEnoughBalance
-                          ? context.colorScheme.primary
-                          : context.colorScheme.error,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    'Stored token mint: ${token.mintUrl}',
+                    style: context.textTheme.bodySmall,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
-              ],
-            ),
+                ],
+              );
+            },
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (error, stackTrace) => Text(
               error.toString(),
@@ -477,6 +648,53 @@ class _InfoCard extends StatelessWidget {
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PaymentStatusCard extends StatelessWidget {
+  const _PaymentStatusCard({
+    required this.amountSats,
+    required this.paymentResponse,
+  });
+
+  final int amountSats;
+  final TollGatePaymentResponse paymentResponse;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.green.withAlpha(18),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.green.withAlpha(50)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Last top-up submitted',
+            style: context.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '$amountSats sats sent to the TollGate. Status: ${paymentResponse.status}.',
+            style: context.textTheme.bodyMedium,
+          ),
+          if (paymentResponse.authToken != null &&
+              paymentResponse.authToken!.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              'Router session token received.',
+              style: context.textTheme.bodySmall,
+            ),
+          ],
         ],
       ),
     );

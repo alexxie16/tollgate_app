@@ -3,6 +3,7 @@ import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
 import 'package:tollgate_app/core/result/unit.dart';
+import 'package:tollgate_app/domain/tollgate/constants/tollgate_constants.dart';
 import 'package:wifi_iot/wifi_iot.dart';
 import 'package:wifi_scan/wifi_scan.dart';
 
@@ -76,9 +77,7 @@ class WifiService {
       final networks = <WiFiNetwork>[];
 
       for (final ap in accessPoints) {
-        // Check if this is a TollGate network (based on SSID for demo)
-        final isTollGate = ap.ssid.contains('TollGate') ||
-            ap.ssid.toLowerCase().contains('tollgate');
+        final isTollGate = looksLikeTollGateSsid(ap.ssid);
 
         networks.add(
           WiFiNetwork(

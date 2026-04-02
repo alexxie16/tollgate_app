@@ -6,43 +6,40 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:tollgate_app/presentation/features/wallet/providers/current_mint_provider.dart';
 import 'package:tollgate_app/presentation/features/wallet/providers/local_ecash_providers.dart';
 
+import '../../../../../config/providers/repository_providers.dart';
+import '../../../../../config/providers/service_providers.dart';
 import '../../../../../core/result/result.dart';
 import '../../../../../core/result/unit.dart';
 import '../../../../../domain/wallet/errors/wallet_errors.dart';
 import '../../../../../domain/wallet/value_objects/send_amount.dart';
-import '../../providers/mint_transactions_providers.dart';
+import '../../providers/wallet_balance_stream_provider.dart';
 import '../../providers/wallet_transactions_provider.dart';
 
 part 'reserve_screen_notifier.freezed.dart';
 part 'reserve_screen_notifier.g.dart';
 
-/// State for the reserve screen
 @freezed
 sealed class ReserveScreenState with _$ReserveScreenState {
-  /// State for entering the amount
   const factory ReserveScreenState.editing({
     required Mint mint,
     required SendAmount amount,
-    required bool isPreparingSend,
+    required bool isPreparingReserve,
     required bool showErrorMessages,
-    PrepareSendFailure? error,
+    String? error,
   }) = ReserveScreenEditingState;
 
-  /// State for confirming the amount and fee
   const factory ReserveScreenState.confirming({
     required Mint mint,
-    required PreparedSend preparedSend,
+    required SendAmount amount,
     required bool isGeneratingToken,
-    SendFailure? error,
+    String? error,
   }) = ReserveScreenConfirmingState;
 
-  /// State for displaying the generated token
   const factory ReserveScreenState.complete({
     required Token token,
   }) = ReserveScreenCompleteState;
 }
 
-/// Notifier for the reserve screen
 @riverpod
 class ReserveScreenNotifier extends _$ReserveScreenNotifier {
   @override
@@ -51,37 +48,35 @@ class ReserveScreenNotifier extends _$ReserveScreenNotifier {
     if (currentMint == null) {
       throw Exception('A mint should be selected at this point');
     }
+
     return ReserveScreenState.editing(
       mint: currentMint,
-      amount: SendAmount.fromData(BigInt.from(0)),
-      isPreparingSend: false,
+      amount: SendAmount.fromData(BigInt.zero),
+      isPreparingReserve: false,
       showErrorMessages: false,
     );
   }
 
-  /// Updates the amount to reserve
   void updateAmount(String amountString) {
     final currentState = state.unwrapPrevious().valueOrNull;
     if (currentState == null || currentState is! ReserveScreenEditingState) {
       return;
     }
 
-    // Try to parse the amount
     BigInt? newAmount;
     try {
       final amount = double.parse(amountString);
-      // Convert to sats
       newAmount = BigInt.from(amount);
-    } catch (e) {
-      // Ignore parsing errors here
-    }
+    } catch (_) {}
 
-    update((state) => (state as ReserveScreenEditingState).copyWith(
-          amount: SendAmount.fromData(newAmount ?? BigInt.from(0)),
-        ));
+    update(
+      (state) => (state as ReserveScreenEditingState).copyWith(
+        amount: SendAmount.fromData(newAmount ?? BigInt.zero),
+        error: null,
+      ),
+    );
   }
 
-  /// Validates the amount
   Result<Unit, PrepareSendFailure> validateAmount() {
     final currentState = state.unwrapPrevious().valueOrNull;
     if (currentState == null || currentState is! ReserveScreenEditingState) {
@@ -91,7 +86,7 @@ class ReserveScreenNotifier extends _$ReserveScreenNotifier {
     }
 
     final amount = currentState.amount;
-    if (amount.value <= BigInt.from(0)) {
+    if (amount.value <= BigInt.zero) {
       return Result.failure(
         PrepareSendFailure.unexpected('Amount must be greater than 0'),
       );
@@ -100,79 +95,142 @@ class ReserveScreenNotifier extends _$ReserveScreenNotifier {
     return Result.ok(unit);
   }
 
-  /// Prepares to reserve eCash by creating a send transaction
   Future<void> prepareReserve() async {
     final currentState = state.unwrapPrevious().valueOrNull;
     if (currentState == null || currentState is! ReserveScreenEditingState) {
       return;
     }
 
-    // Validate the amount
     final validationResult = validateAmount();
-
     if (validationResult.isFailure) {
-      update((state) => (state as ReserveScreenEditingState).copyWith(
-            showErrorMessages: true,
-          ));
+      update(
+        (state) => (state as ReserveScreenEditingState).copyWith(
+          showErrorMessages: true,
+        ),
+      );
       return;
     }
 
-    update((state) => (state as ReserveScreenEditingState).copyWith(
-          isPreparingSend: true,
-        ));
-
-    final prepareSendResult = await ref.read(
-        prepareSendProvider(currentState.mint, currentState.amount).future);
-
-    switch (prepareSendResult) {
-      case Ok(value: final preparedSend):
-        update((state) => ReserveScreenState.confirming(
-              mint: currentState.mint,
-              preparedSend: preparedSend,
-              isGeneratingToken: false,
-            ));
-        return;
-      case Failure(failure: final failure):
-        // Show errors if validation fails
-        update((state) => (state as ReserveScreenEditingState).copyWith(
-              showErrorMessages: true,
-              error: failure,
-            ));
-        return;
-    }
+    update(
+      (_) => ReserveScreenState.confirming(
+        mint: currentState.mint,
+        amount: currentState.amount,
+        isGeneratingToken: false,
+      ),
+    );
   }
 
-  /// Generates the token and stores it locally
   Future<void> generateAndStoreToken() async {
     final currentState = state.unwrapPrevious().valueOrNull;
     if (currentState == null || currentState is! ReserveScreenConfirmingState) {
       return;
     }
 
-    update((state) => (state as ReserveScreenConfirmingState).copyWith(
-          isGeneratingToken: true,
-        ));
+    update(
+      (state) => (state as ReserveScreenConfirmingState).copyWith(
+        isGeneratingToken: true,
+        error: null,
+      ),
+    );
 
-    final generateTokenResult = await ref.read(
-        sendProvider(currentState.preparedSend, currentState.mint).future);
+    final existingLocalToken =
+        await ref.read(ecashLocalTokenStreamProvider.future);
+    if (existingLocalToken != null) {
+      update(
+        (state) => (state as ReserveScreenConfirmingState).copyWith(
+          isGeneratingToken: false,
+          error:
+              'A local eCash token is already stored. Use it first before reserving a new one.',
+        ),
+      );
+      return;
+    }
 
-    switch (generateTokenResult) {
-      case Ok(value: final token):
-        // Store the token locally
-        await ref.read(storeLocalEcashProvider(token.encoded).future);
-        ref.invalidate(walletTransactionsProvider);
+    final reserveWalletService = ref.read(reserveWalletServiceProvider);
+    final pendingReserveBalance =
+        await reserveWalletService.reserveBalance(currentState.mint.url);
+    if (pendingReserveBalance > BigInt.zero) {
+      final recoveredToken = await reserveWalletService.exportReservedToken(
+        mintUrl: currentState.mint.url,
+        amount: pendingReserveBalance,
+      );
+      await _storeReservedToken(recoveredToken);
+      return;
+    }
 
-        // Update state to show success
-        update((state) => ReserveScreenState.complete(
-              token: token,
-            ));
-        return;
+    final walletRepo = await ref.read(walletRepositoryProvider.future);
+    final prepareSendResult = await walletRepo.prepareSend(
+      mint: currentState.mint,
+      amount: currentState.amount,
+    );
+
+    late final PreparedSend preparedSend;
+    switch (prepareSendResult) {
+      case Ok(value: final value):
+        preparedSend = value;
       case Failure(failure: final failure):
-        update((state) => (state as ReserveScreenConfirmingState).copyWith(
-              isGeneratingToken: false,
-              error: failure,
-            ));
+        update(
+          (state) => (state as ReserveScreenConfirmingState).copyWith(
+            isGeneratingToken: false,
+            error: failure.toString(),
+          ),
+        );
         return;
     }
+
+    final sendResult = await walletRepo.send(
+      mint: currentState.mint,
+      preparedSend: preparedSend,
+    );
+
+    late final Token temporaryToken;
+    switch (sendResult) {
+      case Ok(value: final value):
+        temporaryToken = value;
+      case Failure(failure: final failure):
+        update(
+          (state) => (state as ReserveScreenConfirmingState).copyWith(
+            isGeneratingToken: false,
+            error: failure.toString(),
+          ),
+        );
+        return;
+    }
+
+    ref.invalidate(walletBalanceStreamProvider);
+    ref.invalidate(walletTransactionsProvider);
+
+    try {
+      await reserveWalletService.importTokenAsOneSatProofs(
+        mintUrl: currentState.mint.url,
+        token: temporaryToken,
+      );
+    } catch (_) {
+      await _storeReservedToken(temporaryToken);
+      return;
+    }
+
+    try {
+      final finalToken = await reserveWalletService.exportReservedToken(
+        mintUrl: currentState.mint.url,
+        amount: currentState.amount.value,
+      );
+      await _storeReservedToken(finalToken);
+    } catch (_) {
+      update(
+        (state) => (state as ReserveScreenConfirmingState).copyWith(
+          isGeneratingToken: false,
+          error:
+              'The reserve token has been reissued into small proofs, but exporting it failed. Retry reserve to recover the pending balance.',
+        ),
+      );
+    }
+  }
+
+  Future<void> _storeReservedToken(Token token) async {
+    await ref.read(storeLocalEcashProvider(token.encoded).future);
+    update(
+      (_) => ReserveScreenState.complete(token: token),
+    );
   }
 }

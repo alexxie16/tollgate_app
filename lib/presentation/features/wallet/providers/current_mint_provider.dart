@@ -15,28 +15,14 @@ part 'current_mint_provider.g.dart';
 class CurrentMint extends _$CurrentMint {
   @override
   Future<Mint?> build() async {
-    final walletRepo = await ref.watch(walletRepositoryProvider.future);
     final cashuLocalPreferences = ref.watch(cashuLocalPreferencesProvider);
     final mintUrl = cashuLocalPreferences.getCurrentMintUrl();
-    if (mintUrl != null) {
-      final currentMint = await _findMintByUrl(walletRepo, mintUrl);
-      if (currentMint != null) {
-        return currentMint;
-      }
-
-      await cashuLocalPreferences.removeCurrentMintUrl();
+    if (mintUrl != null && mintUrl.isNotEmpty) {
+      return Mint(url: mintUrl);
     }
 
-    final defaultMint = await _ensureMintAvailable(
-      walletRepo,
-      MintUrl.fromData(kDefaultMintUrl),
-    );
-    if (defaultMint == null) {
-      return null;
-    }
-
-    await cashuLocalPreferences.saveCurrentMintUrl(defaultMint.url);
-    return defaultMint;
+    await cashuLocalPreferences.saveCurrentMintUrl(kDefaultMintUrl);
+    return Mint(url: kDefaultMintUrl);
   }
 
   Future<Result<Mint, String>> configureMint(String rawMintUrl) async {

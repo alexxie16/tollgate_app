@@ -30,28 +30,32 @@ class TollGateInfo {
   });
 
   factory TollGateInfo.fromJson(Map<String, dynamic> json) {
-    // Extract the tags for easier access
     final rawTags = (json['tags'] as List<dynamic>).map((tag) {
       return (tag as List<dynamic>).map((item) => item.toString()).toList();
     }).toList();
 
-    // Helper to find a tag by name
-    String findTagValue(String name, {String defaultValue = ''}) {
+    String findTagValue(
+      String name, {
+      String defaultValue = '',
+      int preferredIndex = 1,
+    }) {
       for (final tag in rawTags) {
         if (tag.isNotEmpty && tag.first == name) {
+          if (tag.length > preferredIndex) {
+            return tag[preferredIndex];
+          }
+
           return tag.length > 1 ? tag[1] : defaultValue;
         }
       }
       return defaultValue;
     }
 
-    // Parse tag values
     final metric = findTagValue('metric', defaultValue: 'time');
     final stepSizeStr = findTagValue('step_size', defaultValue: '60');
-    final pricePerStepStr = findTagValue('price_per_step', defaultValue: '10');
-    final mintUrl = findTagValue('mint', defaultValue: '');
-    final tips = findTagValue('tip',
-        defaultValue: 'Pay for WiFi with Bitcoin Lightning ⚡');
+    final pricePerStepStr = _extractPricePerStep(rawTags) ?? '10';
+    final mintUrl = _extractMintUrl(rawTags) ?? '';
+    final tips = _extractTips(rawTags) ?? 'Pay for WiFi with Bitcoin Lightning';
 
     return TollGateInfo(
       kind: json['kind'] as int,
@@ -67,6 +71,60 @@ class TollGateInfo {
       mintUrl: mintUrl,
       tips: tips,
     );
+  }
+
+  static String? _extractPricePerStep(List<List<String>> rawTags) {
+    for (final tag in rawTags) {
+      if (tag.isEmpty || tag.first != 'price_per_step') {
+        continue;
+      }
+
+      if (tag.length > 2 && int.tryParse(tag[2]) != null) {
+        return tag[2];
+      }
+
+      if (tag.length > 1 && int.tryParse(tag[1]) != null) {
+        return tag[1];
+      }
+    }
+
+    return null;
+  }
+
+  static String? _extractMintUrl(List<List<String>> rawTags) {
+    for (final tag in rawTags) {
+      if (tag.isEmpty) {
+        continue;
+      }
+
+      if (tag.first == 'mint' && tag.length > 1) {
+        return tag[1];
+      }
+
+      if (tag.first == 'price_per_step' && tag.length > 4) {
+        return tag[4];
+      }
+    }
+
+    return null;
+  }
+
+  static String? _extractTips(List<List<String>> rawTags) {
+    for (final tag in rawTags) {
+      if (tag.isEmpty) {
+        continue;
+      }
+
+      if (tag.first == 'tip' && tag.length > 1) {
+        return tag[1];
+      }
+
+      if (tag.first == 'tips' && tag.length > 1) {
+        return tag.skip(1).join(', ');
+      }
+    }
+
+    return null;
   }
 
   /// Calculate price for a given amount of time in seconds

@@ -1,5 +1,7 @@
 import 'package:network_info_plus/network_info_plus.dart';
 
+import '../../tollgate/constants/tollgate_constants.dart';
+
 /// Model representing information about the current WiFi connection
 class WifiConnectionInfo {
   /// The SSID of the connected network
@@ -69,7 +71,7 @@ class WifiConnectionInfo {
     );
   }
 
-  bool get isTollGate => cleanSsid?.contains('TollGate') ?? false;
+  bool get isTollGate => looksLikeTollGateSsid(cleanSsid);
 
   @override
   String toString() {

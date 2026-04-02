@@ -4,7 +4,6 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:tollgate_app/presentation/common/extensions/build_context_x.dart';
 
-import '../../../../../core/result/result.dart';
 import '../controllers/reserve_screen_notifier.dart';
 
 class ReserveAmountInputForm extends HookConsumerWidget {
@@ -52,7 +51,7 @@ class ReserveAmountInputForm extends HookConsumerWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                'Specify how much eCash you want to generate and store offline for TollGate',
+                'Specify how much eCash you want to reissue and store offline for TollGate. The app will ask the mint for many 1 sat proofs during reserve.',
                 style: context.textTheme.bodyMedium,
               ),
               const SizedBox(height: 32),
@@ -140,7 +139,7 @@ class ReserveAmountInputForm extends HookConsumerWidget {
                 width: double.infinity,
                 height: 56,
                 child: ElevatedButton(
-                  onPressed: state.isPreparingSend
+                  onPressed: state.isPreparingReserve
                       ? null
                       : () {
                           reserveScreenNotifier.prepareReserve();
@@ -152,7 +151,7 @@ class ReserveAmountInputForm extends HookConsumerWidget {
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  child: state.isPreparingSend
+                  child: state.isPreparingReserve
                       ? const SizedBox(
                           width: 24,
                           height: 24,

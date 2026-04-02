@@ -12,7 +12,9 @@ Flutter mobile application for discovering TollGate Wi-Fi networks and paying fo
 - Wallet `Receive` action now opens a real Cashu token receive flow
 - Wallet `Recent Transactions` now loads actual wallet transactions from the Cashu/CDK wallet history
 - Available TollGate network scan cards no longer show fake random `sats/min`; live pricing is only shown after connecting to a TollGate
-- TollGate pricing review screen now uses real `TollGateInfo` data and the real wallet balance
+- TollGate SSIDs can now be connected from the home and scan flows, then load live pricing from `http://172.19.217.1:2121`
+- TollGate top-up now uses a reserved local eCash token that the app tries to reissue into many `1 sat` proofs while online, then splits it offline and submits the selected raw token to `POST http://172.19.217.1:2121/`
+- The app does not require showing a captive-portal UI to the user for the current TollGate payment flow
 - Primary supported build target is Android
 - iOS/macOS toolchain can be configured, but the app's Wi-Fi connection flow is Android-first
 
@@ -155,6 +157,20 @@ https://mint.minibits.cash/Bitcoin/v1/info
 
 ## Wallet Actions
 
+### Reserve local eCash for TollGate
+
+1. Open `Wallet`.
+2. Open `Reserve`.
+3. Enter the sats amount you want to carry offline for TollGate.
+4. Confirm the reserve action while the mint is reachable.
+5. The app temporarily exports that amount from the main wallet, re-receives it through the mint using a `1 sat` proof target, then stores the final token locally for TollGate use.
+
+Implementation notes:
+
+- This reserve flow is TollGate-specific and keeps the normal wallet mint/send flows unchanged.
+- The app persists one local eCash token for TollGate at a time.
+- If a previous reserve attempt already has pending balance in the reserve wallet, the app exports that balance before trying to create a new reserved token.
+
 ### Receive a Cashu token
 
 1. Open `Wallet`.
@@ -178,34 +194,55 @@ The `Recent Transactions` section on the wallet screen now reads real transactio
 The app cannot know a TollGate's real price from a Wi-Fi scan alone.
 
 - Scanned TollGate SSIDs are now shown as `Pricing available after connect` until the app can fetch live router metadata.
-- Real pricing comes from `TollGateInfo` after connecting to a TollGate network and querying the router gateway.
+- TollGate Wi-Fi detection is based on the SSID pattern and those cards now connect directly into the app's TollGate flow.
 
 ### Connected TollGate pricing
 
-When connected to a TollGate, the app reads pricing from the router metadata tags:
+When connected to a TollGate, the app fetches pricing from the router API at:
+
+```text
+http://172.19.217.1:2121
+```
+
+The app reads pricing from the TollGate metadata tags, including:
 
 - `metric`
 - `step_size`
 - `price_per_step`
 - `mint`
 
-The connected TollGate card and TollGate pricing screen now use that real metadata instead of mock `sats/min` values.
+The connected TollGate card and TollGate top-up screen now use that real metadata instead of mock `sats/min` values.
 
-### Payment flow status
+For example, if the router advertises `metric=megabytes`, `step_size=21`, and `price_per_step=1`, the app interprets that as `1 sat per 21 MB`.
 
-The TollGate pricing screen is now truthful, but the app still does **not** submit a real TollGate payment yet.
+### Top-up flow
 
-- It shows live router pricing.
-- It shows the real wallet balance.
-- It estimates time package costs for time-based TollGate metrics.
-- It does not yet create/send the actual TollGate payment request to the router.
+The TollGate screen now performs a real offline local-eCash top-up flow:
+
+1. Connect to a TollGate SSID from the home screen or scan screen.
+2. Load live pricing from `http://172.19.217.1:2121`.
+3. Choose a package derived from the router's advertised data step size, or enter a custom amount in MB.
+4. Use the already reserved local eCash token stored in the app.
+5. Split that token locally into the selected amount when the proof set allows an exact offline split.
+6. Submit the selected token to the router with `POST http://172.19.217.1:2121/` using the raw Cashu token string as the request body.
+
+Implementation notes:
+
+- The screen shows the reserved local eCash balance before attempting a top-up.
+- The preset top-up packages are built from the router's step size, such as `21 MB`, `105 MB`, and `210 MB` when one step equals `21 MB`.
+- The TollGate purchase flow does not call the mint at payment time; it only posts the stored local token to the router endpoint.
+- The reserve flow now tries to reissue the token through the mint into many `1 sat` proofs before storing it, so later offline splits are much more likely to succeed.
+- If the token still cannot be split exactly into the selected amount, the app fails locally and asks you to reserve again while online.
+- The payment request posts the raw Cashu token body directly to the router endpoint instead of wrapping it in JSON.
+- The app logs the router payment URL, request payload, and HTTP response in debug output to help with on-device testing.
+- Android cleartext HTTP is enabled because the router APIs are local `http://` endpoints.
 
 ### Live device testing status
 
 End-to-end testing against a real SSID such as `TollGate-A4PX-2.4GHz` requires a physical Android device connected over `adb`.
 
 - The Android emulator build/run path was verified after these changes.
-- A live Wi-Fi join and payment test could not be completed in this attempt because no physical Android phone was attached during the test pass.
+- A live Wi-Fi join and real payment submission test could not be completed in this attempt because no physical Android phone was attached during the test pass.
 
 ### Run on Android device or emulator
 

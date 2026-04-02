@@ -4,6 +4,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../data/local/cashu_local_preferences.dart';
 import '../../data/local/ecash_local_storage.dart';
 import '../../data/services/tollgate/tollgate_service.dart';
+import '../../data/services/wallet/reserve_wallet_service.dart';
 import '../../data/services/wifi/wifi_service.dart';
 import '../storage/local_storage_service_provider.dart';
 
@@ -26,3 +27,6 @@ EcashLocalStorage ecashLocalStorage(Ref ref) {
   final storageService = ref.watch(localStorageServiceProvider);
   return EcashLocalStorage(localPropertiesService: storageService);
 }
+
+@Riverpod(keepAlive: true)
+ReserveWalletService reserveWalletService(Ref ref) => ReserveWalletService();

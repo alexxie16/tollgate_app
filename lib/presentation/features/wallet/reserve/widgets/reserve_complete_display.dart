@@ -48,7 +48,7 @@ class ReserveCompleteDisplay extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  '${token.amount.toString()} sats have been reserved as local eCash for use with TollGate',
+                  '${token.amount.toString()} sats have been reserved as local eCash for use with TollGate. When possible, the token now uses many 1 sat proofs for easier offline top-ups.',
                   style: context.textTheme.bodyMedium,
                   textAlign: TextAlign.center,
                 ),
