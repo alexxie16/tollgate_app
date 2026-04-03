@@ -4,6 +4,7 @@ import 'package:cdk_flutter/cdk_flutter.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../../../../../config/providers/service_providers.dart';
 import '../../../../../core/result/result.dart';
 import '../../../../../core/result/unit.dart';
 import '../../../../../domain/wallet/value_objects/send_amount.dart';
@@ -104,12 +105,11 @@ class SendScreenNotifier extends _$SendScreenNotifier {
       ),
     );
 
-    final swappedToken =
-        await ref.read(swappedEcashLocalTokenStreamProvider.future);
+    final BigInt swappedBalance =
+        await ref.read(swappedEcashBalanceProvider.future);
     final regularToken =
         await ref.read(regularEcashLocalTokenStreamProvider.future);
-    final localToken = swappedToken ?? regularToken;
-    if (localToken == null) {
+    if (swappedBalance <= BigInt.zero && regularToken == null) {
       update(
         (_) => currentState.copyWith(
           isPreparingSend: false,
@@ -119,34 +119,42 @@ class SendScreenNotifier extends _$SendScreenNotifier {
       return;
     }
 
-    if (localToken.amount < currentState.amount.value) {
+    if (swappedBalance >= currentState.amount.value) {
       update(
-        (_) => currentState.copyWith(
-          isPreparingSend: false,
-          error:
-              'The stored local token only has ${localToken.amount} sats, but this send needs ${currentState.amount.value} sats.',
+        (_) => SendScreenState.confirming(
+          amount: currentState.amount,
+          isGeneratingToken: false,
         ),
       );
       return;
     }
 
-    try {
-      splitTokenExact(token: localToken, amount: currentState.amount.value);
-    } catch (_) {
+    if (regularToken == null) {
       update(
         (_) => currentState.copyWith(
           isPreparingSend: false,
           error:
-              'The active local token cannot be split exactly into ${currentState.amount.value} sats. Swap your regular eCash into swapped eCash first or receive a more granular token.',
+              'The swapped eCash pool is empty or too small, and no regular token is stored.',
+        ),
+      );
+      return;
+    }
+
+    if (regularToken.amount == currentState.amount.value) {
+      update(
+        (_) => SendScreenState.confirming(
+          amount: currentState.amount,
+          isGeneratingToken: false,
         ),
       );
       return;
     }
 
     update(
-      (_) => SendScreenState.confirming(
-        amount: currentState.amount,
-        isGeneratingToken: false,
+      (_) => currentState.copyWith(
+        isPreparingSend: false,
+        error:
+            'The regular token cannot be split exactly into ${currentState.amount.value} sats. Swap all local eCash into swapped eCash first.',
       ),
     );
   }
@@ -181,12 +189,12 @@ class SendScreenNotifier extends _$SendScreenNotifier {
       ),
     );
 
-    final swappedToken =
-        await ref.read(swappedEcashLocalTokenStreamProvider.future);
+    final swappedPool = await ref
+        .read(localEcashWalletServiceProvider)
+        .poolWithAmount(currentState.amount.value);
     final regularToken =
         await ref.read(regularEcashLocalTokenStreamProvider.future);
-    final localToken = swappedToken ?? regularToken;
-    if (localToken == null) {
+    if (swappedPool == null && regularToken == null) {
       update(
         (_) => currentState.copyWith(
           isGeneratingToken: false,
@@ -196,42 +204,44 @@ class SendScreenNotifier extends _$SendScreenNotifier {
       return;
     }
 
-    late final SplitTokenResult splitResult;
     try {
-      splitResult = splitTokenExact(
-        token: localToken,
-        amount: currentState.amount.value,
-      );
-    } catch (_) {
+      if (swappedPool != null) {
+        final token =
+            await ref.read(localEcashWalletServiceProvider).exportToken(
+                  mintUrl: swappedPool.mintUrl,
+                  amount: currentState.amount.value,
+                );
+        ref.invalidate(swappedEcashPoolBalancesProvider);
+        ref.invalidate(swappedEcashBalanceProvider);
+        update(
+          (_) => SendScreenState.tokenGenerated(token: token),
+        );
+        return;
+      }
+
+      if (regularToken != null &&
+          regularToken.amount == currentState.amount.value) {
+        await ref.read(clearLocalEcashProvider.future);
+        update(
+          (_) => SendScreenState.tokenGenerated(token: regularToken),
+        );
+        return;
+      }
+
       update(
         (_) => currentState.copyWith(
           isGeneratingToken: false,
           error:
-              'The active local token cannot be split exactly into ${currentState.amount.value} sats. Swap your regular eCash into swapped eCash first.',
+              'The regular token cannot be split exactly into ${currentState.amount.value} sats. Swap all local eCash into swapped eCash first.',
         ),
       );
-      return;
+    } catch (error) {
+      update(
+        (_) => currentState.copyWith(
+          isGeneratingToken: false,
+          error: 'Failed to create the token. $error',
+        ),
+      );
     }
-
-    final remainder = splitResult.remainder;
-    if (swappedToken != null) {
-      if (remainder == null) {
-        await ref.read(clearSwappedEcashProvider.future);
-      } else {
-        await ref.read(storeSwappedEcashProvider(remainder.encoded).future);
-      }
-    } else {
-      if (remainder == null) {
-        await ref.read(clearLocalEcashProvider.future);
-      } else {
-        await ref.read(storeLocalEcashProvider(remainder.encoded).future);
-      }
-    }
-
-    update(
-      (_) => SendScreenState.tokenGenerated(
-        token: splitResult.selected,
-      ),
-    );
   }
 }

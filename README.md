@@ -181,7 +181,7 @@ Implementation notes:
 2. Tap `Send`.
 3. Enter the sats amount you want to export.
 4. Confirm the amount.
-5. The app splits the stored local eCash token offline, keeps the remainder locally, and shows the outgoing token as QR/text.
+5. The app exports an exact token from the swapped eCash pool when available, or uses the regular token directly when it already matches the requested amount exactly.
 
 ### Balance model
 
@@ -190,7 +190,7 @@ The wallet home now shows local eCash buckets, not a combined mint-backed accoun
 - `Receive` prepares regular local eCash.
 - `Swap All` converts regular local eCash into swapped local eCash with `1 sat` proofs.
 - `Send` and TollGate payment prefer swapped local eCash because it is easier to split exactly offline.
-- The wallet page also shows pending hidden-wallet balances left from earlier swap attempts and lets you recover them into swapped eCash.
+- The wallet page also shows swapped eCash pool balances and any legacy swapped token waiting to be imported into that pool.
 - The app no longer exposes `Reserve` or `Melt` in the wallet UI.
 
 ## TollGate Pricing And Payment
@@ -228,8 +228,8 @@ The TollGate screen now performs a real offline local-eCash top-up flow:
 1. Connect to a TollGate SSID from the home screen or scan screen.
 2. Load live pricing from `http://172.19.217.1:2121`.
 3. Choose a package derived from the router's advertised data step size, or enter a custom amount in MB.
-4. Use the active local eCash token already saved in the app.
-5. Split that token locally into the selected amount when the proof set allows an exact offline split.
+4. Use the active local eCash already saved in the app.
+5. Export an exact token from the swapped eCash pool when available, or use the regular token directly when it already matches the requested amount exactly.
 6. Submit the selected token to the router with `POST http://172.19.217.1:2121/` using the raw Cashu token string as the request body.
 
 Implementation notes:
@@ -237,7 +237,7 @@ Implementation notes:
 - The screen shows the active local eCash balance before attempting a top-up.
 - The preset top-up packages are built from the router's step size, such as `21 MB`, `105 MB`, and `210 MB` when one step equals `21 MB`.
 - The TollGate purchase flow does not call the mint at payment time; it only posts the selected local token slice to the router endpoint.
-- If a regular token cannot be split exactly into the selected amount, swap it into swapped eCash from the wallet page first.
+- If a regular token cannot satisfy the selected amount exactly, swap all local eCash into swapped eCash from the wallet page first.
 - The payment request posts the raw Cashu token body directly to the router endpoint instead of wrapping it in JSON.
 - The app logs the router payment URL, request payload, and HTTP response in debug output to help with on-device testing.
 - Android cleartext HTTP is enabled because the router APIs are local `http://` endpoints.

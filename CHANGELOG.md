@@ -106,6 +106,16 @@
 - Added pending hidden-wallet balance recovery to the wallet page so stranded balances from earlier attempts can be recovered into swapped eCash.
 - Updated `README.md` to document the new regular-vs-swapped eCash model and the manual swap workflow.
 
+### Attempt 18 - Replace submodule swap logic with local one-sat pool
+
+- Reverted the `cdk_flutter` submodule back to its stock API and removed the custom swap/split helper changes from the submodule worktree.
+- Reimplemented swapping entirely in app code by using the hidden local wallet and repeated `prepareSend(1) -> send -> receive` cycles to top up a one-sat proof pool.
+- Changed the wallet's swapped eCash model so it now lives in the hidden local wallet pool instead of as a custom split token stored in app preferences.
+- Updated `Send` and TollGate payment to export exact amounts from that hidden swapped pool when possible, and only fall back to the regular token when it already matches the requested amount exactly.
+- Repurposed the old swapped-token storage key as a legacy import path so earlier locally stored swapped tokens can still be folded into the hidden swapped pool.
+- Updated the wallet page to show regular eCash, swapped eCash pool balance, pool mint breakdowns, and a single `Swap All Local eCash` action.
+- Updated `README.md` to describe the stock-wallet-API one-sat pool approach and the new swapped pool behavior.
+
 ## 2026-04-01
 
 ### Attempt 1 - Android build and device verification

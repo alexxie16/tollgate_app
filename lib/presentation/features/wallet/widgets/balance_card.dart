@@ -21,18 +21,26 @@ class _BalanceCardState extends ConsumerState<BalanceCard> {
   bool _isSwapping = false;
   String? _statusMessage;
 
-  Future<void> _swapAllRegularEcash({
-    required Token regularToken,
-    required Token? existingSwappedToken,
+  Future<void> _swapAllLocalEcash({
+    required Token? regularToken,
+    required Token? legacySwappedToken,
+    required List<LocalEcashPendingBalance> stagingBalances,
   }) async {
     final hasInternet =
         ref.read(connectivityStreamProvider).valueOrNull ?? false;
     if (!hasInternet) {
       AppSnackBar.showError(
         context,
-        message:
-            'Internet is required to swap regular eCash into 1 sat proofs.',
+        message: 'Internet is required to swap local eCash into 1 sat proofs.',
       );
+      return;
+    }
+
+    if (regularToken == null &&
+        legacySwappedToken == null &&
+        stagingBalances.isEmpty) {
+      AppSnackBar.showInfo(context,
+          message: 'No local eCash is available to swap.');
       return;
     }
 
@@ -42,27 +50,30 @@ class _BalanceCardState extends ConsumerState<BalanceCard> {
     });
 
     try {
-      final swappedToken = await ref
-          .read(localEcashWalletServiceProvider)
-          .swapTokenToOneSatProofs(
+      await ref.read(localEcashWalletServiceProvider).swapAllToOneSatPool(
             regularToken: regularToken,
-            existingSwappedToken: existingSwappedToken,
+            legacySwappedToken: legacySwappedToken,
           );
-      await ref.read(storeSwappedEcashProvider(swappedToken.encoded).future);
-      await ref.read(clearLocalEcashProvider.future);
+      if (regularToken != null) {
+        await ref.read(clearLocalEcashProvider.future);
+      }
+      if (legacySwappedToken != null) {
+        await ref.read(clearLegacySwappedEcashProvider.future);
+      }
+      ref.invalidate(stagingEcashPendingBalancesProvider);
+      ref.invalidate(swappedEcashPoolBalancesProvider);
+      ref.invalidate(swappedEcashBalanceProvider);
 
       if (!mounted) {
         return;
       }
       setState(() {
         _isSwapping = false;
-        _statusMessage =
-            'Swapped ${regularToken.amount} sats into swapped eCash with 1 sat proofs.';
+        _statusMessage = 'Local eCash was swapped into the one-sat pool.';
       });
       AppSnackBar.showSuccess(
         context,
-        message:
-            'Swapped ${regularToken.amount} sats into swapped eCash with 1 sat proofs.',
+        message: 'Local eCash was swapped into the one-sat pool.',
       );
     } catch (error) {
       if (!mounted) {
@@ -76,82 +87,40 @@ class _BalanceCardState extends ConsumerState<BalanceCard> {
     }
   }
 
-  Future<void> _recoverPendingBalance(
-    LocalEcashPendingBalance pending,
-    Token? existingSwappedToken,
-  ) async {
-    setState(() {
-      _isSwapping = true;
-      _statusMessage = null;
-    });
-
-    try {
-      final exportedPendingToken =
-          await ref.read(localEcashWalletServiceProvider).exportToken(
-                mintUrl: pending.mintUrl,
-                amount: pending.amount,
-              );
-
-      if (existingSwappedToken != null) {
-        final mergedToken = await ref
-            .read(localEcashWalletServiceProvider)
-            .swapTokenToOneSatProofs(
-              regularToken: exportedPendingToken,
-              existingSwappedToken: existingSwappedToken,
-            );
-        await ref.read(storeSwappedEcashProvider(mergedToken.encoded).future);
-      } else {
-        await ref.read(
-            storeSwappedEcashProvider(exportedPendingToken.encoded).future);
-      }
-
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _isSwapping = false;
-        _statusMessage = 'Recovered ${pending.amount} sats into swapped eCash.';
-      });
-      AppSnackBar.showSuccess(
-        context,
-        message: 'Recovered ${pending.amount} sats into swapped eCash.',
-      );
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _isSwapping = false;
-        _statusMessage = 'Recovery failed: $error';
-      });
-      AppSnackBar.showError(context, message: 'Recovery failed.\n$error');
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final regularTokenAsync = ref.watch(regularEcashLocalTokenStreamProvider);
-    final swappedTokenAsync = ref.watch(swappedEcashLocalTokenStreamProvider);
-    final pendingBalancesAsync = ref.watch(localEcashPendingBalancesProvider);
+    final legacySwappedTokenAsync =
+        ref.watch(legacySwappedEcashLocalTokenStreamProvider);
+    final swappedBalanceAsync = ref.watch(swappedEcashBalanceProvider);
+    final stagingBalancesAsync = ref.watch(stagingEcashPendingBalancesProvider);
+    final poolBalancesAsync = ref.watch(swappedEcashPoolBalancesProvider);
     final hasInternet =
         ref.watch(connectivityStreamProvider).valueOrNull ?? false;
 
     if (regularTokenAsync.isLoading ||
-        swappedTokenAsync.isLoading ||
-        pendingBalancesAsync.isLoading) {
+        legacySwappedTokenAsync.isLoading ||
+        swappedBalanceAsync.isLoading ||
+        stagingBalancesAsync.isLoading ||
+        poolBalancesAsync.isLoading) {
       return const LoadingCard();
     }
 
     final regularToken = regularTokenAsync.valueOrNull;
-    final swappedToken = swappedTokenAsync.valueOrNull;
-    final pendingBalances =
-        pendingBalancesAsync.valueOrNull ?? const <LocalEcashPendingBalance>[];
+    final legacySwappedToken = legacySwappedTokenAsync.valueOrNull;
+    final swappedBalance = swappedBalanceAsync.valueOrNull ?? BigInt.zero;
+    final stagingBalances =
+        stagingBalancesAsync.valueOrNull ?? const <LocalEcashPendingBalance>[];
+    final poolBalances =
+        poolBalancesAsync.valueOrNull ?? const <LocalEcashPendingBalance>[];
 
     return _buildWidget(
       context,
       regularToken: regularToken,
-      swappedToken: swappedToken,
-      pendingBalances: pendingBalances,
+      legacySwappedToken: legacySwappedToken,
+      swappedBalance: swappedBalance,
+      stagingBalances: stagingBalances,
+      poolBalances: poolBalances,
       hasInternet: hasInternet,
       statusMessage: _statusMessage,
     );
@@ -160,8 +129,10 @@ class _BalanceCardState extends ConsumerState<BalanceCard> {
   Widget _buildWidget(
     BuildContext context, {
     required Token? regularToken,
-    required Token? swappedToken,
-    required List<LocalEcashPendingBalance> pendingBalances,
+    required Token? legacySwappedToken,
+    required BigInt swappedBalance,
+    required List<LocalEcashPendingBalance> stagingBalances,
+    required List<LocalEcashPendingBalance> poolBalances,
     required bool hasInternet,
     required String? statusMessage,
   }) {
@@ -219,93 +190,93 @@ class _BalanceCardState extends ConsumerState<BalanceCard> {
           _buildBalanceItem(
             context,
             'Swapped eCash',
-            swappedToken?.amount ?? BigInt.zero,
-            swappedToken?.mintUrl,
+            swappedBalance,
+            null,
             fadedTextColor,
             textColor,
           ),
-          if (regularToken != null) ...[
+          if (legacySwappedToken != null) ...[
             const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: _isSwapping || !hasInternet
-                    ? null
-                    : () => _swapAllRegularEcash(
-                          regularToken: regularToken,
-                          existingSwappedToken: swappedToken,
-                        ),
-                icon: _isSwapping
-                    ? SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: context.colorScheme.onPrimary,
-                        ),
-                      )
-                    : const Icon(Icons.swap_horiz_rounded),
-                label: Text(
-                  hasInternet
-                      ? 'Swap All Regular eCash'
-                      : 'Swap Needs Internet',
-                ),
+            Text(
+              'Legacy swapped token waiting to be imported',
+              style: context.textTheme.bodySmall?.copyWith(
+                color: fadedTextColor,
               ),
             ),
-          ],
-          if (pendingBalances.isNotEmpty) ...[
-            const SizedBox(height: 20),
+            const SizedBox(height: 4),
             Text(
-              'Pending hidden-wallet balances',
+              '${legacySwappedToken.amount} sats from ${legacySwappedToken.mintUrl}',
+              style: context.textTheme.bodySmall,
+            ),
+          ],
+          if (poolBalances.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Text(
+              'Swapped eCash pools',
               style: context.textTheme.titleSmall?.copyWith(
                 fontWeight: FontWeight.bold,
               ),
             ),
             const SizedBox(height: 8),
-            Text(
-              'These balances were found from earlier normalization or swap attempts and can be recovered into swapped eCash.',
-              style: context.textTheme.bodySmall?.copyWith(
-                color: fadedTextColor,
-              ),
-            ),
-            const SizedBox(height: 12),
-            ...pendingBalances.map(
+            ...poolBalances.map(
               (pending) => Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '${pending.amount} sats',
-                            style: context.textTheme.titleSmall,
-                          ),
-                          Text(
-                            pending.mintUrl,
-                            style: context.textTheme.bodySmall?.copyWith(
-                              color: fadedTextColor,
-                            ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    TextButton(
-                      onPressed: _isSwapping
-                          ? null
-                          : () => _recoverPendingBalance(pending, swappedToken),
-                      child: const Text('Recover'),
-                    ),
-                  ],
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(
+                  '${pending.amount} sats at ${pending.mintUrl}',
+                  style: context.textTheme.bodySmall?.copyWith(
+                    color: fadedTextColor,
+                  ),
                 ),
               ),
             ),
           ],
+          if (stagingBalances.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Text(
+              'Pending staging balances',
+              style: context.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            ...stagingBalances.map(
+              (pending) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(
+                  '${pending.amount} sats at ${pending.mintUrl}',
+                  style: context.textTheme.bodySmall?.copyWith(
+                    color: fadedTextColor,
+                  ),
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: _isSwapping || !hasInternet
+                  ? null
+                  : () => _swapAllLocalEcash(
+                        regularToken: regularToken,
+                        legacySwappedToken: legacySwappedToken,
+                        stagingBalances: stagingBalances,
+                      ),
+              icon: _isSwapping
+                  ? SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: context.colorScheme.onPrimary,
+                      ),
+                    )
+                  : const Icon(Icons.swap_horiz_rounded),
+              label: Text(
+                hasInternet ? 'Swap All Local eCash' : 'Swap Needs Internet',
+              ),
+            ),
+          ),
           if (statusMessage != null) ...[
             const SizedBox(height: 12),
             Text(

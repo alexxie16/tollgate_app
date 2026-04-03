@@ -241,7 +241,7 @@ class _ReceiveScreenState extends ConsumerState<ReceiveScreen> {
   @override
   Widget build(BuildContext context) {
     final regularTokenAsync = ref.watch(regularEcashLocalTokenStreamProvider);
-    final swappedTokenAsync = ref.watch(swappedEcashLocalTokenStreamProvider);
+    final swappedBalanceAsync = ref.watch(swappedEcashBalanceProvider);
     final hasInternet =
         ref.watch(connectivityStreamProvider).valueOrNull ?? false;
     final currentMintAsync = ref.watch(currentMintProvider);
@@ -274,7 +274,7 @@ class _ReceiveScreenState extends ConsumerState<ReceiveScreen> {
                   icon: Icons.cloud_off_rounded,
                 ),
               if (!hasInternet) const SizedBox(height: 16),
-              if (regularTokenAsync.isLoading || swappedTokenAsync.isLoading)
+              if (regularTokenAsync.isLoading || swappedBalanceAsync.isLoading)
                 const Center(child: CircularProgressIndicator())
               else
                 Card(
@@ -283,7 +283,7 @@ class _ReceiveScreenState extends ConsumerState<ReceiveScreen> {
                     title: const Text('Local eCash status'),
                     subtitle: Text(
                       'Regular: ${regularTokenAsync.valueOrNull?.amount ?? BigInt.zero} sats\n'
-                      'Swapped: ${swappedTokenAsync.valueOrNull?.amount ?? BigInt.zero} sats',
+                      'Swapped: ${swappedBalanceAsync.valueOrNull ?? BigInt.zero} sats',
                     ),
                   ),
                 ),

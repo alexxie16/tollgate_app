@@ -6,6 +6,7 @@ import 'package:tollgate_app/presentation/router/routes.dart';
 
 import 'widgets/action_card.dart';
 import 'widgets/balance_card.dart';
+import 'widgets/recent_transactions_widget.dart';
 
 class WalletScreen extends ConsumerWidget {
   const WalletScreen({super.key});
@@ -33,6 +34,8 @@ class WalletScreen extends ConsumerWidget {
                 const BalanceCard(),
                 const SizedBox(height: 16),
                 _buildActionCards(context),
+                const SizedBox(height: 24),
+                const RecentTransactionsWidget(),
               ],
             ),
           ),

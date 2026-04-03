@@ -193,11 +193,14 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     final selectedDataAmountLabel =
         _selectedDataAmountLabel(tollgateInfo, _selectedPackage);
     final selectedPrice = _packagePrice(tollgateInfo, _selectedPackage);
-    final localEcashAsync = ref.watch(ecashLocalTokenStreamProvider);
-    final localEcash = localEcashAsync.valueOrNull;
-    final localEcashBalance = localEcash?.amount ?? BigInt.zero;
+    final regularEcashAsync = ref.watch(regularEcashLocalTokenStreamProvider);
+    final swappedEcashBalanceAsync = ref.watch(swappedEcashBalanceProvider);
+    final regularEcash = regularEcashAsync.valueOrNull;
+    final swappedEcashBalance =
+        swappedEcashBalanceAsync.valueOrNull ?? BigInt.zero;
     final hasEnoughBalance = selectedPrice != null &&
-        localEcashBalance >= BigInt.from(selectedPrice);
+        (swappedEcashBalance >= BigInt.from(selectedPrice) ||
+            regularEcash?.amount == BigInt.from(selectedPrice));
 
     return Scaffold(
       appBar: AppBar(
@@ -235,7 +238,8 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
               _buildPackageSelector(tollgateInfo),
             const SizedBox(height: 16),
             _LocalEcashCard(
-              localEcashAsync: localEcashAsync,
+              regularEcashAsync: regularEcashAsync,
+              swappedEcashBalanceAsync: swappedEcashBalanceAsync,
               selectedPrice: selectedPrice,
               hasEnoughBalance: hasEnoughBalance,
             ),
@@ -504,17 +508,22 @@ class _NetworkSummaryCard extends StatelessWidget {
 
 class _LocalEcashCard extends StatelessWidget {
   const _LocalEcashCard({
-    required this.localEcashAsync,
+    required this.regularEcashAsync,
+    required this.swappedEcashBalanceAsync,
     required this.selectedPrice,
     required this.hasEnoughBalance,
   });
 
-  final AsyncValue<Token?> localEcashAsync;
+  final AsyncValue<Token?> regularEcashAsync;
+  final AsyncValue<BigInt> swappedEcashBalanceAsync;
   final int? selectedPrice;
   final bool hasEnoughBalance;
 
   @override
   Widget build(BuildContext context) {
+    final regularToken = regularEcashAsync.valueOrNull;
+    final swappedBalance = swappedEcashBalanceAsync.valueOrNull;
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -541,64 +550,54 @@ class _LocalEcashCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          localEcashAsync.when(
-            data: (token) {
-              if (token == null) {
-                return Text(
-                  'No local eCash token stored. Use Receive before trying to buy internet offline.',
-                  style: context.textTheme.bodyMedium?.copyWith(
-                    color: context.colorScheme.error,
-                  ),
-                );
-              }
-
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
+          if (!regularEcashAsync.hasValue || swappedBalance == null)
+            const Center(child: CircularProgressIndicator())
+          else
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      '$swappedBalance sats swapped',
+                      style: context.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: selectedPrice == null || hasEnoughBalance
+                            ? context.colorScheme.primary
+                            : context.colorScheme.error,
+                      ),
+                    ),
+                    if (selectedPrice != null)
                       Text(
-                        '${token.amount} sats',
-                        style: context.textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: selectedPrice == null || hasEnoughBalance
+                        hasEnoughBalance
+                            ? 'Enough for selection'
+                            : 'Need $selectedPrice sats',
+                        style: context.textTheme.bodySmall?.copyWith(
+                          color: hasEnoughBalance
                               ? context.colorScheme.primary
                               : context.colorScheme.error,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
-                      if (selectedPrice != null)
-                        Text(
-                          hasEnoughBalance
-                              ? 'Enough for selection'
-                              : 'Need $selectedPrice sats',
-                          style: context.textTheme.bodySmall?.copyWith(
-                            color: hasEnoughBalance
-                                ? context.colorScheme.primary
-                                : context.colorScheme.error,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Regular eCash: ${regularToken?.amount ?? BigInt.zero} sats',
+                  style: context.textTheme.bodySmall,
+                ),
+                if (regularToken != null) ...[
+                  const SizedBox(height: 4),
                   Text(
-                    'Stored token mint: ${token.mintUrl}',
+                    'Regular token mint: ${regularToken.mintUrl}',
                     style: context.textTheme.bodySmall,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ],
-              );
-            },
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (error, stackTrace) => Text(
-              error.toString(),
-              style: context.textTheme.bodyMedium?.copyWith(
-                color: context.colorScheme.error,
-              ),
+              ],
             ),
-          ),
         ],
       ),
     );

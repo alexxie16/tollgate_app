@@ -117,36 +117,41 @@ class TollgateInteractor {
       return Result.failure('Enter an amount greater than 0 sats.');
     }
 
-    final swappedToken =
-        await ref.read(swappedEcashLocalTokenStreamProvider.future);
+    final swappedPool = await ref
+        .read(localEcashWalletServiceProvider)
+        .poolWithAmount(BigInt.from(amountSats));
     final regularToken =
         await ref.read(regularEcashLocalTokenStreamProvider.future);
-    final localToken = swappedToken ?? regularToken;
-    if (localToken == null) {
+    if (swappedPool == null && regularToken == null) {
       return Result.failure(
         'No local eCash token is available. Receive a token into the app before buying TollGate access offline.',
       );
     }
 
-    if (localToken.amount < BigInt.from(amountSats)) {
+    if (swappedPool == null && regularToken!.amount < BigInt.from(amountSats)) {
       return Result.failure(
-        'The stored local eCash token only has ${localToken.amount} sats, but this selection needs $amountSats sats.',
+        'The stored regular eCash token only has ${regularToken.amount} sats, but this selection needs $amountSats sats.',
       );
     }
 
-    late final SplitTokenResult splitResult;
+    late final Token token;
     try {
-      splitResult = splitTokenExact(
-        token: localToken,
-        amount: BigInt.from(amountSats),
-      );
-    } catch (_) {
+      if (swappedPool != null) {
+        token = await ref.read(localEcashWalletServiceProvider).exportToken(
+              mintUrl: swappedPool.mintUrl,
+              amount: BigInt.from(amountSats),
+            );
+      } else if (regularToken!.amount == BigInt.from(amountSats)) {
+        token = regularToken;
+      } else {
+        return Result.failure(
+          'The regular local eCash token cannot be split exactly into $amountSats sats offline. Swap all local eCash into swapped eCash first from the wallet page.',
+        );
+      }
+    } catch (error) {
       return Result.failure(
-        'The active local eCash token cannot be split exactly into $amountSats sats offline. Swap your regular eCash into swapped eCash first from the wallet page.',
-      );
+          'Failed to prepare the TollGate payment token. $error');
     }
-
-    final token = splitResult.selected;
 
     final paymentResult =
         await ref.read(tollgateServiceProvider).submitEcashToken(
@@ -156,19 +161,12 @@ class TollgateInteractor {
 
     switch (paymentResult) {
       case Ok(value: final paymentResponse):
-        final remainder = splitResult.remainder;
-        if (swappedToken != null) {
-          if (remainder == null) {
-            await ref.read(clearSwappedEcashProvider.future);
-          } else {
-            await ref.read(storeSwappedEcashProvider(remainder.encoded).future);
-          }
-        } else {
-          if (remainder == null) {
-            await ref.read(clearLocalEcashProvider.future);
-          } else {
-            await ref.read(storeLocalEcashProvider(remainder.encoded).future);
-          }
+        if (swappedPool != null) {
+          ref.invalidate(swappedEcashPoolBalancesProvider);
+          ref.invalidate(swappedEcashBalanceProvider);
+        } else if (regularToken != null &&
+            regularToken.amount == BigInt.from(amountSats)) {
+          await ref.read(clearLocalEcashProvider.future);
         }
         return Result.ok(
           TollgateTopUpResult(
