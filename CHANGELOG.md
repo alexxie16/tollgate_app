@@ -116,6 +116,15 @@
 - Updated the wallet page to show regular eCash, swapped eCash pool balance, pool mint breakdowns, and a single `Swap All Local eCash` action.
 - Updated `README.md` to describe the stock-wallet-API one-sat pool approach and the new swapped pool behavior.
 
+### Attempt 19 - Fix swap self-send failure and restore history
+
+- Fixed the `Blinded Message is already signed` failure by splitting the hidden swap implementation into two wallets: a staging wallet that prepares the `1 sat` sends, and a separate one-sat pool wallet that receives them.
+- Updated `Swap All Local eCash` to import regular eCash into the staging wallet, then refill the one-sat pool from that staging wallet instead of self-sending into the same wallet.
+- Restored the wallet transaction history widget on the wallet screen using the existing `walletTransactionsProvider`.
+- Added local TollGate payment history storage and merged those router payments into the wallet history list.
+- Updated TollGate and Send to export exact amounts from the one-sat pool wallet, fixing false insufficient-funds behavior when swapped balance is available.
+- Replaced the wrong Home-screen wallet-based MB estimate with actual remaining data from the TollGate router's `/usage` endpoint.
+
 ## 2026-04-01
 
 ### Attempt 1 - Android build and device verification

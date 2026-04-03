@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:tollgate_app/core/result/result.dart';
 import 'package:tollgate_app/presentation/common/extensions/async_value_x.dart';
 import 'package:tollgate_app/presentation/common/extensions/build_context_x.dart';
+import 'package:tollgate_app/presentation/common/extensions/tollgate_info_x.dart';
 import 'package:tollgate_app/presentation/common/providers/connectivity_stream_provider.dart';
 
 import '../../../domain/tollgate/constants/tollgate_constants.dart';
@@ -195,12 +197,19 @@ class HomeScreen extends HookConsumerWidget {
   }) {
     final tollGateInfoAsync =
         ref.watch(tollgateInfoProvider(kTollgateRouterIp)).flatten;
+    final tollgateUsageAsync =
+        ref.watch(tollgateUsageProvider(kTollgateRouterIp));
 
     return tollGateInfoAsync.when(
       data: (tollGateInfo) => ConnectedTollgateCard(
         ssid: connectionInfo.ssid ?? 'Unknown Network',
         tollgateInfo: tollGateInfo,
         hasInternet: hasInternet,
+        remainingDataLabel: switch (tollgateUsageAsync.valueOrNull) {
+          Ok(value: final usage) when tollGateInfo.isDataMetric =>
+            tollGateInfo.humanReadableRemainingData(usage.remainingBytes),
+          _ => null,
+        },
       ),
       error: (error, stack) => ConnectedNonTollgateCard(
         ssid: connectionInfo.ssid ?? 'Unknown Network',

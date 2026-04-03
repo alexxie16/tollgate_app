@@ -4,14 +4,14 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:tollgate_app/presentation/common/extensions/build_context_x.dart';
 
-import '../providers/wallet_transactions_provider.dart';
+import '../providers/wallet_history_provider.dart';
 
 class RecentTransactionsWidget extends ConsumerWidget {
   const RecentTransactionsWidget({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final transactionsAsync = ref.watch(walletTransactionsProvider);
+    final transactionsAsync = ref.watch(walletHistoryProvider);
 
     return transactionsAsync.when(
       data: (transactions) {
@@ -43,7 +43,7 @@ class RecentTransactionsWidget extends ConsumerWidget {
               ...visibleTransactions.map(
                 (tx) => Padding(
                   padding: const EdgeInsets.only(bottom: 12),
-                  child: _TransactionRow(transaction: tx),
+                  child: _TransactionRow(entry: tx),
                 ),
               ),
             ],
@@ -60,17 +60,35 @@ class RecentTransactionsWidget extends ConsumerWidget {
 }
 
 class _TransactionRow extends StatelessWidget {
-  const _TransactionRow({required this.transaction});
+  const _TransactionRow({required this.entry});
 
-  final Transaction transaction;
+  final WalletHistoryEntry entry;
 
   @override
   Widget build(BuildContext context) {
-    final isIncoming = transaction.direction == TransactionDirection.incoming;
-    final timestamp = DateTime.fromMillisecondsSinceEpoch(
-      transaction.timestamp.toInt() * 1000,
-      isUtc: true,
-    ).toLocal();
+    final timestamp = entry.timestamp;
+    final isIncoming = switch (entry) {
+      WalletTransactionHistoryEntry(:final transaction) =>
+        transaction.direction == TransactionDirection.incoming,
+      TollgatePaymentHistoryEntryView() => false,
+    };
+    final title = switch (entry) {
+      WalletTransactionHistoryEntry() => isIncoming ? 'Incoming' : 'Outgoing',
+      TollgatePaymentHistoryEntryView(:final entry) => entry.dataLabel == null
+          ? 'TollGate Top Up'
+          : 'TollGate ${entry.dataLabel}',
+    };
+    final subtitle = switch (entry) {
+      WalletTransactionHistoryEntry(:final transaction) =>
+        transaction.memo?.isNotEmpty == true ? transaction.memo : null,
+      TollgatePaymentHistoryEntryView(:final entry) =>
+        entry.ssid == null ? entry.status : '${entry.ssid} • ${entry.status}',
+    };
+    final amount = switch (entry) {
+      WalletTransactionHistoryEntry(:final transaction) => transaction.amount,
+      TollgatePaymentHistoryEntryView(:final entry) =>
+        BigInt.from(entry.amountSats),
+    };
 
     return Row(
       children: [
@@ -91,7 +109,7 @@ class _TransactionRow extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                isIncoming ? 'Incoming' : 'Outgoing',
+                title,
                 style: context.textTheme.bodyMedium?.copyWith(
                   fontWeight: FontWeight.w600,
                 ),
@@ -100,9 +118,9 @@ class _TransactionRow extends StatelessWidget {
                 DateFormat('MMM d, HH:mm').format(timestamp),
                 style: context.textTheme.bodySmall,
               ),
-              if (transaction.memo != null && transaction.memo!.isNotEmpty)
+              if (subtitle != null && subtitle.isNotEmpty)
                 Text(
-                  transaction.memo!,
+                  subtitle,
                   style: context.textTheme.bodySmall,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -111,7 +129,7 @@ class _TransactionRow extends StatelessWidget {
           ),
         ),
         Text(
-          '${isIncoming ? '+' : '-'}${transaction.amount} sats',
+          '${isIncoming ? '+' : '-'}$amount sats',
           style: context.textTheme.bodyMedium?.copyWith(
             fontWeight: FontWeight.bold,
             color: isIncoming ? Colors.green : Colors.orange,

@@ -3,12 +3,14 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../../config/providers/service_providers.dart';
 import '../../../../core/result/result.dart';
+import '../../../../data/local/tollgate_payment_history_storage.dart';
 import '../../../../domain/tollgate/constants/tollgate_constants.dart';
 import '../../../../domain/tollgate/models/tollgate_info.dart';
 import '../../../../domain/tollgate/models/tollgate_payment_response.dart';
 import '../../../../domain/wifi/models/wifi_connection_info.dart';
 import '../../../../domain/wifi/models/wifi_network.dart';
 import '../../wallet/providers/local_ecash_providers.dart';
+import '../../wallet/providers/wallet_history_provider.dart';
 import '../../wifi/providers/connect_to_network_provider.dart';
 import '../../wifi/providers/current_connection_state_stream_provider.dart';
 
@@ -112,37 +114,92 @@ class TollgateInteractor {
     required TollGateInfo tollgateInfo,
     required int amountSats,
     String? authToken,
+    String? ssid,
+    String? dataLabel,
   }) async {
     if (amountSats <= 0) {
       return Result.failure('Enter an amount greater than 0 sats.');
     }
 
-    final swappedPool = await ref
-        .read(localEcashWalletServiceProvider)
-        .poolWithAmount(BigInt.from(amountSats));
+    final localEcashWalletService = ref.read(localEcashWalletServiceProvider);
+    final swappedPoolBalances =
+        await localEcashWalletService.listPoolBalances();
+    final swappedPoolTotal = swappedPoolBalances.fold<BigInt>(
+      BigInt.zero,
+      (total, balance) => total + balance.amount,
+    );
     final regularToken =
         await ref.read(regularEcashLocalTokenStreamProvider.future);
-    if (swappedPool == null && regularToken == null) {
+    if (swappedPoolTotal <= BigInt.zero && regularToken == null) {
       return Result.failure(
         'No local eCash token is available. Receive a token into the app before buying TollGate access offline.',
       );
     }
 
-    if (swappedPool == null && regularToken!.amount < BigInt.from(amountSats)) {
+    if (swappedPoolTotal < BigInt.from(amountSats) &&
+        regularToken?.amount != BigInt.from(amountSats)) {
       return Result.failure(
-        'The stored regular eCash token only has ${regularToken.amount} sats, but this selection needs $amountSats sats.',
+        'You need $amountSats sats, but only $swappedPoolTotal sats are available in swapped eCash and the regular token does not match exactly.',
       );
     }
 
-    late final Token token;
+    Token? lastToken;
+    String? lastAuthToken;
     try {
-      if (swappedPool != null) {
-        token = await ref.read(localEcashWalletServiceProvider).exportToken(
-              mintUrl: swappedPool.mintUrl,
-              amount: BigInt.from(amountSats),
+      if (swappedPoolTotal >= BigInt.from(amountSats)) {
+        var remaining = amountSats;
+
+        for (final pool in swappedPoolBalances) {
+          if (remaining <= 0) {
+            break;
+          }
+
+          final available = pool.amount.toInt();
+          final toSend = available < remaining ? available : remaining;
+          for (var i = 0; i < toSend; i++) {
+            final token = await localEcashWalletService.exportFromPool(
+              mintUrl: pool.mintUrl,
+              amount: BigInt.one,
             );
+            lastToken = token;
+
+            final paymentResult =
+                await ref.read(tollgateServiceProvider).submitEcashToken(
+                      cashuToken: token.encoded,
+                      authToken: lastAuthToken ?? authToken,
+                    );
+
+            switch (paymentResult) {
+              case Ok(value: final paymentResponse):
+                lastAuthToken = paymentResponse.authToken ?? lastAuthToken;
+              case Failure(failure: final failure):
+                return Result.failure(failure.message);
+            }
+          }
+          remaining -= toSend;
+        }
+
+        if (remaining > 0 || lastToken == null) {
+          return Result.failure(
+            'Swapped eCash ran out before the full TollGate top-up completed.',
+          );
+        }
+
+        ref.invalidate(swappedEcashPoolBalancesProvider);
+        ref.invalidate(swappedEcashBalanceProvider);
       } else if (regularToken!.amount == BigInt.from(amountSats)) {
-        token = regularToken;
+        lastToken = regularToken;
+        final paymentResult =
+            await ref.read(tollgateServiceProvider).submitEcashToken(
+                  cashuToken: regularToken.encoded,
+                  authToken: authToken,
+                );
+        switch (paymentResult) {
+          case Ok(value: final paymentResponse):
+            lastAuthToken = paymentResponse.authToken;
+          case Failure(failure: final failure):
+            return Result.failure(failure.message);
+        }
       } else {
         return Result.failure(
           'The regular local eCash token cannot be split exactly into $amountSats sats offline. Swap all local eCash into swapped eCash first from the wallet page.',
@@ -153,30 +210,35 @@ class TollgateInteractor {
           'Failed to prepare the TollGate payment token. $error');
     }
 
-    final paymentResult =
-        await ref.read(tollgateServiceProvider).submitEcashToken(
-              cashuToken: token.encoded,
-              authToken: authToken,
-            );
+    if (regularToken != null &&
+        swappedPoolTotal < BigInt.from(amountSats) &&
+        regularToken.amount == BigInt.from(amountSats)) {
+      await ref.read(clearLocalEcashProvider.future);
+    }
 
-    switch (paymentResult) {
-      case Ok(value: final paymentResponse):
-        if (swappedPool != null) {
-          ref.invalidate(swappedEcashPoolBalancesProvider);
-          ref.invalidate(swappedEcashBalanceProvider);
-        } else if (regularToken != null &&
-            regularToken.amount == BigInt.from(amountSats)) {
-          await ref.read(clearLocalEcashProvider.future);
-        }
-        return Result.ok(
-          TollgateTopUpResult(
-            token: token,
-            paymentResponse: paymentResponse,
-            amountSats: token.amount.toInt(),
+    final completedToken = lastToken;
+
+    await ref.read(tollgatePaymentHistoryStorageProvider).add(
+          TollgatePaymentHistoryEntry(
+            id: '${DateTime.now().millisecondsSinceEpoch}-$amountSats',
+            amountSats: amountSats,
+            timestampMs: DateTime.now().millisecondsSinceEpoch,
+            status: lastAuthToken == null ? 'accepted' : 'accepted',
+            ssid: ssid,
+            dataLabel: dataLabel,
           ),
         );
-      case Failure(failure: final failure):
-        return Result.failure(failure.message);
-    }
+    ref.invalidate(walletHistoryProvider);
+
+    return Result.ok(
+      TollgateTopUpResult(
+        token: completedToken,
+        paymentResponse: TollGatePaymentResponse(
+          status: 'accepted',
+          authToken: lastAuthToken,
+        ),
+        amountSats: amountSats,
+      ),
+    );
   }
 }

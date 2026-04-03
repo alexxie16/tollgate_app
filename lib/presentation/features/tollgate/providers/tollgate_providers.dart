@@ -4,6 +4,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../../config/providers/service_providers.dart';
 import '../../../../domain/tollgate/errors/tollgate_errors.dart';
 import '../../../../domain/tollgate/models/tollgate_info.dart';
+import '../../../../domain/tollgate/models/tollgate_usage.dart';
 import '../../../../core/result/result.dart';
 
 part 'tollgate_providers.g.dart';
@@ -24,6 +25,19 @@ Future<Result<bool, TollgateInfoRetrievalError>> isTollgateNetwork(
 ) async {
   final tollgateService = ref.read(tollgateServiceProvider);
   return await tollgateService.detectTollgate(routerIp: routerIp);
+}
+
+@riverpod
+Stream<Result<TollGateUsage, TollgateInfoRetrievalError>> tollgateUsage(
+  Ref ref,
+  String routerIp,
+) async* {
+  final tollgateService = ref.read(tollgateServiceProvider);
+
+  while (true) {
+    yield await tollgateService.getTollgateUsage(routerIp: routerIp);
+    await Future.delayed(const Duration(seconds: 5));
+  }
 }
 
 // Tollgate state to track payments and time

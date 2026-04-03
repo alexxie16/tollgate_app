@@ -20,6 +20,23 @@ extension TollgateInfoX on TollGateInfo {
     return _formatMegabytes(stepSizeInMegabytes * steps);
   }
 
+  String humanReadablePurchasableData(BigInt sats) {
+    if (!isDataMetric || pricePerStep <= 0 || sats <= BigInt.zero) {
+      return '0MB';
+    }
+
+    final steps = sats ~/ BigInt.from(pricePerStep);
+    if (steps <= BigInt.zero) {
+      return '0MB';
+    }
+
+    return _formatMegabytes(stepSizeInMegabytes * steps.toDouble());
+  }
+
+  String humanReadableRemainingData(BigInt bytes) {
+    return _formatMegabytes(bytes.toDouble() / (1024 * 1024));
+  }
+
   String humanReadablePrice() {
     final metric = this.metric.toLowerCase();
     final stepSize = this.stepSize;

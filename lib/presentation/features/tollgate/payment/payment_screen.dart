@@ -154,6 +154,8 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       tollgateInfo: tollgateInfo,
       amountSats: selectedPrice,
       authToken: _sessionAuthToken,
+      ssid: widget.networkData?['ssid'] as String?,
+      dataLabel: _selectedDataAmountLabel(tollgateInfo, _selectedPackage),
     );
 
     if (!mounted) {
@@ -195,11 +197,16 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     final selectedPrice = _packagePrice(tollgateInfo, _selectedPackage);
     final regularEcashAsync = ref.watch(regularEcashLocalTokenStreamProvider);
     final swappedEcashBalanceAsync = ref.watch(swappedEcashBalanceProvider);
+    final swappedEcashPoolsAsync = ref.watch(swappedEcashPoolBalancesProvider);
     final regularEcash = regularEcashAsync.valueOrNull;
-    final swappedEcashBalance =
-        swappedEcashBalanceAsync.valueOrNull ?? BigInt.zero;
+    final hasEnoughSwapped = selectedPrice != null &&
+        (swappedEcashPoolsAsync.valueOrNull ?? const []).fold<BigInt>(
+              BigInt.zero,
+              (total, pool) => total + pool.amount,
+            ) >=
+            BigInt.from(selectedPrice);
     final hasEnoughBalance = selectedPrice != null &&
-        (swappedEcashBalance >= BigInt.from(selectedPrice) ||
+        (hasEnoughSwapped ||
             regularEcash?.amount == BigInt.from(selectedPrice));
 
     return Scaffold(

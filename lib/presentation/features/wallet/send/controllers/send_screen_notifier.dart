@@ -207,7 +207,7 @@ class SendScreenNotifier extends _$SendScreenNotifier {
     try {
       if (swappedPool != null) {
         final token =
-            await ref.read(localEcashWalletServiceProvider).exportToken(
+            await ref.read(localEcashWalletServiceProvider).exportFromPool(
                   mintUrl: swappedPool.mintUrl,
                   amount: currentState.amount.value,
                 );

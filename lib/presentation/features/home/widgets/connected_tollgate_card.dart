@@ -13,6 +13,7 @@ class ConnectedTollgateCard extends ConsumerWidget {
   final TollGateInfo tollgateInfo;
   final bool hasInternet;
   final int remainingSeconds;
+  final String? remainingDataLabel;
 
   const ConnectedTollgateCard({
     super.key,
@@ -20,6 +21,7 @@ class ConnectedTollgateCard extends ConsumerWidget {
     required this.tollgateInfo,
     required this.hasInternet,
     this.remainingSeconds = 0,
+    this.remainingDataLabel,
   });
 
   String _formatRemainingTime() {
@@ -55,6 +57,8 @@ class ConnectedTollgateCard extends ConsumerWidget {
             ),
             if (tollgateInfo.mintUrl.isNotEmpty)
               _buildInfoRow('Mint URL', tollgateInfo.mintUrl),
+            if (remainingDataLabel != null)
+              _buildInfoRow('Data Left', remainingDataLabel!),
             if (hasActiveSession) ...[
               const SizedBox(height: 8),
               _buildInfoRow('Remaining Time', _formatRemainingTime()),

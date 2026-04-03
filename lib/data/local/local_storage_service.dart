@@ -7,9 +7,9 @@ class LocalStorageService {
 
   Future<void> saveProperty(String key, dynamic value) async {
     if (value is String) {
-      _sharedPreferences.setString(key, value);
+      await _sharedPreferences.setString(key, value);
     } else if (value is bool) {
-      _sharedPreferences.setBool(key, value);
+      await _sharedPreferences.setBool(key, value);
     } else if (value is int) {
       await _sharedPreferences.setInt(key, value);
     }

@@ -3,6 +3,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../data/local/cashu_local_preferences.dart';
 import '../../data/local/ecash_local_storage.dart';
+import '../../data/local/tollgate_payment_history_storage.dart';
 import '../../data/services/tollgate/tollgate_service.dart';
 import '../../data/services/wallet/local_ecash_wallet_service.dart';
 import '../../data/services/wifi/wifi_service.dart';
@@ -26,6 +27,12 @@ CashuLocalPreferences cashuLocalPreferences(Ref ref) {
 EcashLocalStorage ecashLocalStorage(Ref ref) {
   final storageService = ref.watch(localStorageServiceProvider);
   return EcashLocalStorage(localPropertiesService: storageService);
+}
+
+@Riverpod(keepAlive: true)
+TollgatePaymentHistoryStorage tollgatePaymentHistoryStorage(Ref ref) {
+  final storageService = ref.watch(localStorageServiceProvider);
+  return TollgatePaymentHistoryStorage(localStorageService: storageService);
 }
 
 @Riverpod(keepAlive: true)

@@ -9,6 +9,7 @@ import 'package:tollgate_app/domain/tollgate/errors/tollgate_payment_submission_
 import '../../../core/result/result.dart';
 import '../../../domain/tollgate/models/tollgate_info.dart';
 import '../../../domain/tollgate/models/tollgate_payment_response.dart';
+import '../../../domain/tollgate/models/tollgate_usage.dart';
 
 class TollgateService {
   final String _defaultPort;
@@ -136,6 +137,46 @@ class TollgateService {
     }
   }
 
+  Future<Result<TollGateUsage, TollgateInfoRetrievalError>> getTollgateUsage({
+    String routerIp = kTollgateRouterIp,
+    String port = kTollgateInfoPort,
+  }) async {
+    final uri = Uri.parse('http://$routerIp:$port/usage');
+
+    try {
+      final response = await http.get(uri).timeout(
+            const Duration(seconds: 5),
+            onTimeout: () => throw Exception('Connection timed out'),
+          );
+
+      if (response.statusCode != 200) {
+        return Result.failure(
+          TollgateInfoRetrievalError.failedToGetTollgateInfo(
+            'Failed to load Tollgate usage: HTTP ${response.statusCode}',
+          ),
+        );
+      }
+
+      final usage = _parseUsage(response.body);
+      if (usage == null) {
+        return Result.failure(
+          TollgateInfoRetrievalError.failedToGetTollgateInfo(
+            'Failed to parse Tollgate usage response.',
+          ),
+        );
+      }
+
+      return Result.ok(usage);
+    } catch (e) {
+      debugPrint('Error fetching Tollgate usage: $e');
+      return Result.failure(
+        TollgateInfoRetrievalError.failedToGetTollgateInfo(
+          'Failed to connect to Tollgate usage endpoint: ${e.toString()}',
+        ),
+      );
+    }
+  }
+
   Map<String, dynamic>? _decodeJsonMap(String body) {
     if (body.trim().isEmpty) {
       return null;
@@ -143,5 +184,32 @@ class TollgateService {
 
     final decoded = jsonDecode(body);
     return decoded is Map<String, dynamic> ? decoded : null;
+  }
+
+  TollGateUsage? _parseUsage(String body) {
+    final trimmed = body.trim();
+    final match = RegExp(r'(\d+)\s*/\s*(\d+)').firstMatch(trimmed);
+    if (match != null) {
+      return TollGateUsage(
+        usedBytes: BigInt.parse(match.group(1)!),
+        allocatedBytes: BigInt.parse(match.group(2)!),
+      );
+    }
+
+    try {
+      final decoded = jsonDecode(trimmed);
+      if (decoded is Map<String, dynamic>) {
+        final used = decoded['used'] ?? decoded['usedBytes'];
+        final allocated = decoded['allocated'] ?? decoded['allocatedBytes'];
+        if (used != null && allocated != null) {
+          return TollGateUsage(
+            usedBytes: BigInt.parse(used.toString()),
+            allocatedBytes: BigInt.parse(allocated.toString()),
+          );
+        }
+      }
+    } catch (_) {}
+
+    return null;
   }
 }

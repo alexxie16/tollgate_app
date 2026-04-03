@@ -13,6 +13,7 @@ Flutter mobile application for discovering TollGate Wi-Fi networks and paying fo
 - Wallet `Receive` now supports both pasted Cashu tokens and invoice creation, and stores the result as regular local eCash
 - Wallet `Send` now prefers swapped local eCash for exact offline splits and falls back to regular local eCash when needed
 - Wallet home now shows both regular eCash and swapped eCash, with a manual `Swap All` action to convert regular eCash into swapped `1 sat` proofs
+- The Home screen now shows actual remaining TollGate session data from the router `usage` endpoint, instead of estimating from wallet balance
 - Available TollGate network scan cards no longer show fake random `sats/min`; live pricing is only shown after connecting to a TollGate
 - TollGate SSIDs can now be connected from the home and scan flows, then load live pricing from `http://172.19.217.1:2121`
 - TollGate top-up now uses the one stored local eCash token, splits it offline, and submits the selected raw token to `POST http://172.19.217.1:2121/`
@@ -189,8 +190,10 @@ The wallet home now shows local eCash buckets, not a combined mint-backed accoun
 
 - `Receive` prepares regular local eCash.
 - `Swap All` converts regular local eCash into swapped local eCash with `1 sat` proofs.
+- `Swap All` uses a hidden staging wallet plus a separate hidden one-sat pool wallet, built entirely with the stock wallet API.
 - `Send` and TollGate payment prefer swapped local eCash because it is easier to split exactly offline.
 - The wallet page also shows swapped eCash pool balances and any legacy swapped token waiting to be imported into that pool.
+- Wallet history includes both wallet backend transactions and successful TollGate payments sent by the app.
 - The app no longer exposes `Reserve` or `Melt` in the wallet UI.
 
 ## TollGate Pricing And Payment
@@ -238,6 +241,7 @@ Implementation notes:
 - The preset top-up packages are built from the router's step size, such as `21 MB`, `105 MB`, and `210 MB` when one step equals `21 MB`.
 - The TollGate purchase flow does not call the mint at payment time; it only posts the selected local token slice to the router endpoint.
 - If a regular token cannot satisfy the selected amount exactly, swap all local eCash into swapped eCash from the wallet page first.
+- The connected TollGate card on Home shows actual remaining data from the router's `/usage` endpoint.
 - The payment request posts the raw Cashu token body directly to the router endpoint instead of wrapping it in JSON.
 - The app logs the router payment URL, request payload, and HTTP response in debug output to help with on-device testing.
 - Android cleartext HTTP is enabled because the router APIs are local `http://` endpoints.
