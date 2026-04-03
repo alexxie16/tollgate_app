@@ -18,7 +18,7 @@ class InvoiceDisplay extends ConsumerWidget {
   final Mint mint;
   final MintAmount amount;
   final VoidCallback onClose;
-  final Future<void> Function()? onIssued;
+  final Future<void> Function(MintQuote mintQuote)? onIssued;
 
   const InvoiceDisplay({
     super.key,
@@ -45,7 +45,7 @@ class InvoiceDisplay extends ConsumerWidget {
               previousQuote?.state != MintQuoteState.issued) {
             ref.invalidate(walletTransactionsProvider);
             if (onIssued != null) {
-              Future.microtask(onIssued!);
+              Future.microtask(() => onIssued!(mintQuote));
             } else {
               Future.delayed(const Duration(seconds: 1), onClose);
             }

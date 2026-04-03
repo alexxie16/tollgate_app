@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../../../config/providers/data_source_providers.dart';
 import '../../../../config/providers/repository_providers.dart';
 import '../../../../core/result/result.dart';
 import '../../../../domain/wallet/value_objects/mint_amount.dart';
@@ -165,7 +166,11 @@ class _ReceiveScreenState extends ConsumerState<ReceiveScreen> {
     });
   }
 
-  Future<void> _finalizeInvoiceIssued(Mint mint, MintAmount mintAmount) async {
+  Future<void> _finalizeInvoiceIssued(
+    Mint mint,
+    MintAmount mintAmount,
+    MintQuote mintQuote,
+  ) async {
     if (_isFinalizingInvoice) {
       return;
     }
@@ -176,6 +181,37 @@ class _ReceiveScreenState extends ConsumerState<ReceiveScreen> {
 
     try {
       final walletRepo = await ref.read(walletRepositoryProvider.future);
+
+      Token? quoteToken = mintQuote.token;
+      if (quoteToken == null) {
+        final walletDataSource =
+            await ref.read(cashuWalletDataSourceProvider.future);
+        final wallet =
+            await walletDataSource.wallet.createOrGetWallet(mintUrl: mint.url);
+        final activeQuotes = await wallet.getActiveMintQuotes();
+        final matchingQuote =
+            activeQuotes.where((quote) => quote.id == mintQuote.id).firstOrNull;
+        quoteToken = matchingQuote?.token;
+      }
+
+      if (quoteToken != null) {
+        final storedToken = await _storeRegularToken(quoteToken);
+        if (!mounted) return;
+
+        setState(() {
+          _receivedAmount = storedToken.amount;
+          _receivedMintUrl = storedToken.mintUrl;
+          _activeInvoiceAmount = null;
+          _isFinalizingInvoice = false;
+        });
+        AppSnackBar.showSuccess(
+          context,
+          message:
+              'Invoice paid and ${storedToken.amount} sats stored as regular local eCash.',
+        );
+        return;
+      }
+
       final prepareSendResult = await walletRepo.prepareSend(
         mint: mint,
         amount: SendAmount.fromData(mintAmount.value),
@@ -353,8 +389,11 @@ class _ReceiveScreenState extends ConsumerState<ReceiveScreen> {
                                     _activeInvoiceAmount = null;
                                   });
                                 },
-                                onIssued: () => _finalizeInvoiceIssued(
-                                    mint, _activeInvoiceAmount!),
+                                onIssued: (mintQuote) => _finalizeInvoiceIssued(
+                                  mint,
+                                  _activeInvoiceAmount!,
+                                  mintQuote,
+                                ),
                               ),
                             ],
                           ],
