@@ -41,8 +41,12 @@ class InvoiceDisplay extends ConsumerWidget {
             _ => null,
           };
 
-          if (mintQuote.state == MintQuoteState.issued &&
-              previousQuote?.state != MintQuoteState.issued) {
+          final becamePayableOrIssued =
+              (mintQuote.state == MintQuoteState.paid ||
+                      mintQuote.state == MintQuoteState.issued) &&
+                  previousQuote?.state != mintQuote.state;
+
+          if (becamePayableOrIssued) {
             ref.invalidate(walletTransactionsProvider);
             if (onIssued != null) {
               Future.microtask(() => onIssued!(mintQuote));

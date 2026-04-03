@@ -181,13 +181,17 @@ class _ReceiveScreenState extends ConsumerState<ReceiveScreen> {
 
     try {
       final walletRepo = await ref.read(walletRepositoryProvider.future);
+      final walletDataSource =
+          await ref.read(cashuWalletDataSourceProvider.future);
+      final wallet =
+          await walletDataSource.wallet.createOrGetWallet(mintUrl: mint.url);
+
+      // If the mint already marked the invoice as paid, force a refresh of
+      // pending mint quotes so we can recover the issued token reliably.
+      await wallet.checkAllMintQuotes();
 
       Token? quoteToken = mintQuote.token;
       if (quoteToken == null) {
-        final walletDataSource =
-            await ref.read(cashuWalletDataSourceProvider.future);
-        final wallet =
-            await walletDataSource.wallet.createOrGetWallet(mintUrl: mint.url);
         final activeQuotes = await wallet.getActiveMintQuotes();
         final matchingQuote =
             activeQuotes.where((quote) => quote.id == mintQuote.id).firstOrNull;

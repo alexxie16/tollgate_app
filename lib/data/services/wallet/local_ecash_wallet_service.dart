@@ -114,6 +114,27 @@ class LocalEcashWalletService {
     return exportToken(mintUrl: mintUrl, amount: balance);
   }
 
+  Future<List<cdk.Token>> exportOneSatTokensFromStaging(
+    String mintUrl,
+    int count,
+  ) async {
+    if (count <= 0) {
+      return const [];
+    }
+
+    final wallet = await _stagingWalletForMint(mintUrl);
+    final tokens = <cdk.Token>[];
+    for (var i = 0; i < count; i++) {
+      final prepared = await wallet.prepareSend(amount: BigInt.one);
+      final token = await wallet.send(
+        send: prepared,
+        memo: 'swapped one sat refill',
+      );
+      tokens.add(token);
+    }
+    return tokens;
+  }
+
   Future<void> topUpOneSatPool(String mintUrl, int refillCount) async {
     if (refillCount <= 0) {
       return;
@@ -150,6 +171,34 @@ class LocalEcashWalletService {
     for (final balance in balances) {
       await topUpOneSatPool(balance.mintUrl, balance.amount.toInt());
     }
+  }
+
+  Future<List<cdk.Token>> swapAllToOneSatTokens({
+    cdk.Token? regularToken,
+    cdk.Token? legacySwappedToken,
+  }) async {
+    if (regularToken != null) {
+      await importToken(mintUrl: regularToken.mintUrl, token: regularToken);
+    }
+
+    if (legacySwappedToken != null) {
+      await importToken(
+        mintUrl: legacySwappedToken.mintUrl,
+        token: legacySwappedToken,
+      );
+    }
+
+    final balances = await listStagingBalances();
+    final oneSatTokens = <cdk.Token>[];
+    for (final balance in balances) {
+      final exported = await exportOneSatTokensFromStaging(
+        balance.mintUrl,
+        balance.amount.toInt(),
+      );
+      oneSatTokens.addAll(exported);
+    }
+
+    return oneSatTokens;
   }
 
   Future<LocalEcashPendingBalance?> poolWithAmount(BigInt amount) async {

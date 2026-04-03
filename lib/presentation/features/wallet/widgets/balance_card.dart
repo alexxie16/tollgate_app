@@ -25,6 +25,7 @@ class _BalanceCardState extends ConsumerState<BalanceCard> {
     required Token? regularToken,
     required Token? legacySwappedToken,
     required List<LocalEcashPendingBalance> stagingBalances,
+    required List<Token> existingSwappedTokens,
   }) async {
     final hasInternet =
         ref.read(connectivityStreamProvider).valueOrNull ?? false;
@@ -50,10 +51,18 @@ class _BalanceCardState extends ConsumerState<BalanceCard> {
     });
 
     try {
-      await ref.read(localEcashWalletServiceProvider).swapAllToOneSatPool(
-            regularToken: regularToken,
-            legacySwappedToken: legacySwappedToken,
-          );
+      final oneSatTokens =
+          await ref.read(localEcashWalletServiceProvider).swapAllToOneSatTokens(
+                regularToken: regularToken,
+                legacySwappedToken: legacySwappedToken,
+              );
+      final mergedTokens = [
+        ...existingSwappedTokens.map((token) => token.encoded),
+        ...oneSatTokens.map((token) => token.encoded),
+      ];
+      await ref.read(storeSwappedOneSatTokensProvider(
+        mergedTokens,
+      ).future);
       if (regularToken != null) {
         await ref.read(clearLocalEcashProvider.future);
       }
@@ -61,8 +70,6 @@ class _BalanceCardState extends ConsumerState<BalanceCard> {
         await ref.read(clearLegacySwappedEcashProvider.future);
       }
       ref.invalidate(stagingEcashPendingBalancesProvider);
-      ref.invalidate(swappedEcashPoolBalancesProvider);
-      ref.invalidate(swappedEcashBalanceProvider);
 
       if (!mounted) {
         return;
@@ -92,6 +99,7 @@ class _BalanceCardState extends ConsumerState<BalanceCard> {
     final regularTokenAsync = ref.watch(regularEcashLocalTokenStreamProvider);
     final legacySwappedTokenAsync =
         ref.watch(legacySwappedEcashLocalTokenStreamProvider);
+    final swappedTokensAsync = ref.watch(swappedEcashOneSatTokensProvider);
     final swappedBalanceAsync = ref.watch(swappedEcashBalanceProvider);
     final stagingBalancesAsync = ref.watch(stagingEcashPendingBalancesProvider);
     final poolBalancesAsync = ref.watch(swappedEcashPoolBalancesProvider);
@@ -100,6 +108,7 @@ class _BalanceCardState extends ConsumerState<BalanceCard> {
 
     if (regularTokenAsync.isLoading ||
         legacySwappedTokenAsync.isLoading ||
+        swappedTokensAsync.isLoading ||
         swappedBalanceAsync.isLoading ||
         stagingBalancesAsync.isLoading ||
         poolBalancesAsync.isLoading) {
@@ -108,6 +117,7 @@ class _BalanceCardState extends ConsumerState<BalanceCard> {
 
     final regularToken = regularTokenAsync.valueOrNull;
     final legacySwappedToken = legacySwappedTokenAsync.valueOrNull;
+    final swappedTokens = swappedTokensAsync.valueOrNull ?? const <Token>[];
     final swappedBalance = swappedBalanceAsync.valueOrNull ?? BigInt.zero;
     final stagingBalances =
         stagingBalancesAsync.valueOrNull ?? const <LocalEcashPendingBalance>[];
@@ -118,6 +128,7 @@ class _BalanceCardState extends ConsumerState<BalanceCard> {
       context,
       regularToken: regularToken,
       legacySwappedToken: legacySwappedToken,
+      swappedTokens: swappedTokens,
       swappedBalance: swappedBalance,
       stagingBalances: stagingBalances,
       poolBalances: poolBalances,
@@ -130,6 +141,7 @@ class _BalanceCardState extends ConsumerState<BalanceCard> {
     BuildContext context, {
     required Token? regularToken,
     required Token? legacySwappedToken,
+    required List<Token> swappedTokens,
     required BigInt swappedBalance,
     required List<LocalEcashPendingBalance> stagingBalances,
     required List<LocalEcashPendingBalance> poolBalances,
@@ -261,6 +273,7 @@ class _BalanceCardState extends ConsumerState<BalanceCard> {
                         regularToken: regularToken,
                         legacySwappedToken: legacySwappedToken,
                         stagingBalances: stagingBalances,
+                        existingSwappedTokens: swappedTokens,
                       ),
               icon: _isSwapping
                   ? SizedBox(
