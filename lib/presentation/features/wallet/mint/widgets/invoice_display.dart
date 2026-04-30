@@ -30,7 +30,9 @@ class InvoiceDisplay extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final mintQuoteProvider = mintQuoteStreamProvider(mint, amount);
+    final mintQuoteProvider = mintQuoteRequestProvider(
+      (mintUrl: mint.url, amount: amount.value),
+    );
     final mintQuoteAsync = ref.watch(mintQuoteProvider);
 
     ref.listen(mintQuoteProvider, (previous, current) {
@@ -41,12 +43,10 @@ class InvoiceDisplay extends ConsumerWidget {
             _ => null,
           };
 
-          final becamePayableOrIssued =
-              (mintQuote.state == MintQuoteState.paid ||
-                      mintQuote.state == MintQuoteState.issued) &&
-                  previousQuote?.state != mintQuote.state;
+          final becameIssued = mintQuote.state == MintQuoteState.issued &&
+              previousQuote?.state != MintQuoteState.issued;
 
-          if (becamePayableOrIssued) {
+          if (becameIssued) {
             ref.invalidate(walletTransactionsProvider);
             if (onIssued != null) {
               Future.microtask(() => onIssued!(mintQuote));
@@ -61,8 +61,11 @@ class InvoiceDisplay extends ConsumerWidget {
 
     return switch (mintQuoteAsync) {
       AsyncData(value: final result) => switch (result) {
-          Ok(value: final mintQuote) =>
-            _buildWidget(context, mintQuote: mintQuote),
+          Ok(value: final mintQuote) => _buildMintQuoteState(
+              context,
+              mintQuote,
+              onRetry: () => ref.invalidate(mintQuoteProvider),
+            ),
           Failure(failure: final failure) => ErrorCard(
               message: 'Unable to create an invoice.',
               details: failure.toString(),
@@ -77,6 +80,33 @@ class InvoiceDisplay extends ConsumerWidget {
       AsyncLoading() => const Center(child: CircularProgressIndicator()),
       _ => const SizedBox(),
     };
+  }
+
+  Widget _buildMintQuoteState(
+    BuildContext context,
+    MintQuote mintQuote, {
+    required VoidCallback onRetry,
+  }) {
+    final mintError = mintQuote.error?.trim();
+    if (mintQuote.state == MintQuoteState.error) {
+      return ErrorCard(
+        message: 'Unable to create an invoice.',
+        details: mintError?.isNotEmpty == true
+            ? mintError!
+            : 'The mint returned an error while creating the invoice.',
+        onRetry: onRetry,
+      );
+    }
+
+    if (mintQuote.request.trim().isEmpty) {
+      return ErrorCard(
+        message: 'Unable to create an invoice.',
+        details: 'The mint did not return a Lightning invoice request.',
+        onRetry: onRetry,
+      );
+    }
+
+    return _buildWidget(context, mintQuote: mintQuote);
   }
 
   Widget _buildWidget(

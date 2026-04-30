@@ -16,13 +16,22 @@ class CurrentMint extends _$CurrentMint {
   @override
   Future<Mint?> build() async {
     final cashuLocalPreferences = ref.watch(cashuLocalPreferencesProvider);
-    final mintUrl = cashuLocalPreferences.getCurrentMintUrl();
-    if (mintUrl != null && mintUrl.isNotEmpty) {
-      return Mint(url: mintUrl);
+    final walletRepo = await ref.watch(walletRepositoryProvider.future);
+    final storedMintUrl = cashuLocalPreferences.getCurrentMintUrl();
+    final mintUrl = storedMintUrl == null || storedMintUrl.isEmpty
+        ? kDefaultMintUrl
+        : storedMintUrl;
+
+    if (storedMintUrl != mintUrl) {
+      await cashuLocalPreferences.saveCurrentMintUrl(mintUrl);
     }
 
-    await cashuLocalPreferences.saveCurrentMintUrl(kDefaultMintUrl);
-    return Mint(url: kDefaultMintUrl);
+    final configuredMint = await _ensureMintAvailable(
+      walletRepo,
+      MintUrl.fromData(mintUrl),
+    );
+
+    return configuredMint ?? Mint(url: mintUrl);
   }
 
   Future<Result<Mint, String>> configureMint(String rawMintUrl) async {

@@ -105,11 +105,21 @@ class SendScreenNotifier extends _$SendScreenNotifier {
       ),
     );
 
-    final BigInt swappedBalance =
-        await ref.read(swappedEcashBalanceProvider.future);
+    final swappedPool = await ref
+        .read(localEcashWalletServiceProvider)
+        .poolWithAmount(currentState.amount.value);
+    final legacyStoredTokens =
+        await ref.read(swappedEcashOneSatTokensProvider.future);
+    final legacyExactToken = currentState.amount.value == BigInt.one
+        ? legacyStoredTokens
+            .where((token) => token.amount == BigInt.one)
+            .firstOrNull
+        : null;
     final regularToken =
         await ref.read(regularEcashLocalTokenStreamProvider.future);
-    if (swappedBalance <= BigInt.zero && regularToken == null) {
+    if (swappedPool == null &&
+        legacyExactToken == null &&
+        regularToken == null) {
       update(
         (_) => currentState.copyWith(
           isPreparingSend: false,
@@ -119,7 +129,7 @@ class SendScreenNotifier extends _$SendScreenNotifier {
       return;
     }
 
-    if (swappedBalance >= currentState.amount.value) {
+    if (swappedPool != null || legacyExactToken != null) {
       update(
         (_) => SendScreenState.confirming(
           amount: currentState.amount,
@@ -192,9 +202,18 @@ class SendScreenNotifier extends _$SendScreenNotifier {
     final swappedPool = await ref
         .read(localEcashWalletServiceProvider)
         .poolWithAmount(currentState.amount.value);
+    final legacyStoredTokens =
+        await ref.read(swappedEcashOneSatTokensProvider.future);
+    final legacyExactToken = currentState.amount.value == BigInt.one
+        ? legacyStoredTokens
+            .where((token) => token.amount == BigInt.one)
+            .firstOrNull
+        : null;
     final regularToken =
         await ref.read(regularEcashLocalTokenStreamProvider.future);
-    if (swappedPool == null && regularToken == null) {
+    if (swappedPool == null &&
+        legacyExactToken == null &&
+        regularToken == null) {
       update(
         (_) => currentState.copyWith(
           isGeneratingToken: false,
@@ -215,6 +234,18 @@ class SendScreenNotifier extends _$SendScreenNotifier {
         ref.invalidate(swappedEcashBalanceProvider);
         update(
           (_) => SendScreenState.tokenGenerated(token: token),
+        );
+        return;
+      }
+
+      if (legacyExactToken != null) {
+        final remainingTokens = [...legacyStoredTokens]
+          ..remove(legacyExactToken);
+        await ref.read(storeSwappedOneSatTokensProvider(
+          remainingTokens.map((token) => token.encoded).toList(),
+        ).future);
+        update(
+          (_) => SendScreenState.tokenGenerated(token: legacyExactToken),
         );
         return;
       }

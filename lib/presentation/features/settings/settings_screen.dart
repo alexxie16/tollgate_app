@@ -313,7 +313,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Use the default Minibits mint or connect to another Cashu mint to top up the wallet.',
+                      'Use one of the built-in mint presets or connect to another Cashu mint to top up the wallet.',
                       style: theme.textTheme.bodyMedium,
                     ),
                     const SizedBox(height: 16),
@@ -322,15 +322,28 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       currentMintAsync: currentMintAsync,
                     ),
                     const SizedBox(height: 16),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: _isSavingMint
-                            ? null
-                            : () => _configureMint(kDefaultMintUrl),
-                        icon: const Icon(Icons.bolt),
-                        label: const Text('Use Default Minibits Mint'),
-                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: _isSavingMint
+                                ? null
+                                : () => _configureMint(kDefaultMintUrls.first),
+                            icon: const Icon(Icons.bolt),
+                            label: const Text('Use Minibits'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: _isSavingMint
+                                ? null
+                                : () => _configureMint(kDefaultMintUrls[1]),
+                            icon: const Icon(Icons.bolt),
+                            label: const Text('Use Coinos'),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 12),
                     TextField(

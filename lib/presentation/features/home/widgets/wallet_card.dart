@@ -13,17 +13,17 @@ class WalletCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final regularTokenAsync = ref.watch(regularEcashLocalTokenStreamProvider);
+    final regularBalanceAsync = ref.watch(regularEcashBalanceProvider);
     final swappedBalanceAsync = ref.watch(swappedEcashBalanceProvider);
 
-    if (regularTokenAsync.isLoading || swappedBalanceAsync.isLoading) {
+    if (regularBalanceAsync.isLoading || swappedBalanceAsync.isLoading) {
       return const LoadingCard();
     }
 
-    final regularBalance = regularTokenAsync.valueOrNull?.amount ?? BigInt.zero;
+    final regularBalance = regularBalanceAsync.valueOrNull ?? BigInt.zero;
     final swappedBalance = swappedBalanceAsync.valueOrNull ?? BigInt.zero;
     final totalBalance = regularBalance + swappedBalance;
-    final status = regularTokenAsync.hasError || swappedBalanceAsync.hasError
+    final status = regularBalanceAsync.hasError || swappedBalanceAsync.hasError
         ? 'Some local eCash could not be loaded. Tap to manage wallet.'
         : 'Tap to manage wallet';
 

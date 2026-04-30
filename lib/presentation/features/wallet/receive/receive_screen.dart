@@ -4,11 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
-import '../../../../config/providers/data_source_providers.dart';
-import '../../../../config/providers/repository_providers.dart';
-import '../../../../core/result/result.dart';
 import '../../../../domain/wallet/value_objects/mint_amount.dart';
-import '../../../../domain/wallet/value_objects/send_amount.dart';
 import '../../../common/extensions/build_context_x.dart';
 import '../../../common/providers/connectivity_stream_provider.dart';
 import '../../../common/widgets/snackbar/app_snackbar.dart';
@@ -89,6 +85,16 @@ class _ReceiveScreenState extends ConsumerState<ReceiveScreen> {
 
   Future<Token> _storeRegularToken(Token token) async {
     await ref.read(storeLocalEcashProvider(token.encoded).future);
+    final refreshedRegularBalance =
+        await ref.refresh(regularEcashBalanceProvider.future);
+    final refreshedRegularToken =
+        await ref.refresh(regularEcashLocalTokenStreamProvider.future);
+    final refreshedSwappedBalance =
+        await ref.refresh(swappedEcashBalanceProvider.future);
+    assert(refreshedRegularBalance >= BigInt.zero);
+    assert(refreshedRegularToken == null ||
+        refreshedRegularToken.amount >= BigInt.zero);
+    assert(refreshedSwappedBalance >= BigInt.zero);
     return token;
   }
 
@@ -167,7 +173,6 @@ class _ReceiveScreenState extends ConsumerState<ReceiveScreen> {
   }
 
   Future<void> _finalizeInvoiceIssued(
-    Mint mint,
     MintAmount mintAmount,
     MintQuote mintQuote,
   ) async {
@@ -180,69 +185,24 @@ class _ReceiveScreenState extends ConsumerState<ReceiveScreen> {
     });
 
     try {
-      final walletRepo = await ref.read(walletRepositoryProvider.future);
-      final walletDataSource =
-          await ref.read(cashuWalletDataSourceProvider.future);
-      final wallet =
-          await walletDataSource.wallet.createOrGetWallet(mintUrl: mint.url);
-
-      // If the mint already marked the invoice as paid, force a refresh of
-      // pending mint quotes so we can recover the issued token reliably.
-      await wallet.checkAllMintQuotes();
-
-      Token? quoteToken = mintQuote.token;
-      if (quoteToken == null) {
-        final activeQuotes = await wallet.getActiveMintQuotes();
-        final matchingQuote =
-            activeQuotes.where((quote) => quote.id == mintQuote.id).firstOrNull;
-        quoteToken = matchingQuote?.token;
+      if (mintQuote.state != MintQuoteState.issued) {
+        throw Exception('The invoice has not been issued by the mint yet.');
       }
 
-      if (quoteToken != null) {
-        final storedToken = await _storeRegularToken(quoteToken);
-        if (!mounted) return;
-
-        setState(() {
-          _receivedAmount = storedToken.amount;
-          _receivedMintUrl = storedToken.mintUrl;
-          _activeInvoiceAmount = null;
-          _isFinalizingInvoice = false;
-        });
-        AppSnackBar.showSuccess(
-          context,
-          message:
-              'Invoice paid and ${storedToken.amount} sats stored as regular local eCash.',
+      final receivedToken = mintQuote.token;
+      if (receivedToken == null) {
+        throw Exception(
+          'The mint marked the invoice as issued but did not return the minted token.',
         );
-        return;
       }
 
-      final prepareSendResult = await walletRepo.prepareSend(
-        mint: mint,
-        amount: SendAmount.fromData(mintAmount.value),
-      );
-
-      late final PreparedSend preparedSend;
-      switch (prepareSendResult) {
-        case Ok(value: final value):
-          preparedSend = value;
-        case Failure(failure: final failure):
-          throw failure;
+      if (receivedToken.amount != mintAmount.value) {
+        throw Exception(
+          'The mint returned ${receivedToken.amount} sats for a ${mintAmount.value}-sat invoice.',
+        );
       }
 
-      final sendResult = await walletRepo.send(
-        mint: mint,
-        preparedSend: preparedSend,
-      );
-
-      late final Token temporaryToken;
-      switch (sendResult) {
-        case Ok(value: final value):
-          temporaryToken = value;
-        case Failure(failure: final failure):
-          throw failure;
-      }
-
-      final storedToken = await _storeRegularToken(temporaryToken);
+      final storedToken = await _storeRegularToken(receivedToken);
       if (!mounted) return;
 
       setState(() {
@@ -260,12 +220,11 @@ class _ReceiveScreenState extends ConsumerState<ReceiveScreen> {
       if (!mounted) return;
       setState(() {
         _isFinalizingInvoice = false;
-        _activeInvoiceAmount = null;
       });
       AppSnackBar.showError(
         context,
         message:
-            'The invoice was issued, but storing the resulting local eCash failed.\n$error',
+            'The invoice was paid, but storing the resulting local eCash is still pending.\n$error',
       );
     }
   }
@@ -280,7 +239,7 @@ class _ReceiveScreenState extends ConsumerState<ReceiveScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final regularTokenAsync = ref.watch(regularEcashLocalTokenStreamProvider);
+    final regularBalanceAsync = ref.watch(regularEcashBalanceProvider);
     final swappedBalanceAsync = ref.watch(swappedEcashBalanceProvider);
     final hasInternet =
         ref.watch(connectivityStreamProvider).valueOrNull ?? false;
@@ -314,7 +273,8 @@ class _ReceiveScreenState extends ConsumerState<ReceiveScreen> {
                   icon: Icons.cloud_off_rounded,
                 ),
               if (!hasInternet) const SizedBox(height: 16),
-              if (regularTokenAsync.isLoading || swappedBalanceAsync.isLoading)
+              if (regularBalanceAsync.isLoading ||
+                  swappedBalanceAsync.isLoading)
                 const Center(child: CircularProgressIndicator())
               else
                 Card(
@@ -322,7 +282,7 @@ class _ReceiveScreenState extends ConsumerState<ReceiveScreen> {
                     leading: const Icon(Icons.offline_bolt_rounded),
                     title: const Text('Local eCash status'),
                     subtitle: Text(
-                      'Regular: ${regularTokenAsync.valueOrNull?.amount ?? BigInt.zero} sats\n'
+                      'Regular: ${regularBalanceAsync.valueOrNull ?? BigInt.zero} sats\n'
                       'Swapped: ${swappedBalanceAsync.valueOrNull ?? BigInt.zero} sats',
                     ),
                   ),
@@ -394,7 +354,6 @@ class _ReceiveScreenState extends ConsumerState<ReceiveScreen> {
                                   });
                                 },
                                 onIssued: (mintQuote) => _finalizeInvoiceIssued(
-                                  mint,
                                   _activeInvoiceAmount!,
                                   mintQuote,
                                 ),

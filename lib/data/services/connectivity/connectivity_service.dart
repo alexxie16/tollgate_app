@@ -6,23 +6,36 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 class ConnectivityService {
+  static const _probeUris = [
+    'https://connectivitycheck.gstatic.com/generate_204',
+    'https://clients3.google.com/generate_204',
+  ];
+
   final Connectivity _connectivity = Connectivity();
   final StreamController<bool> _internetStatusController =
       StreamController<bool>.broadcast();
   Timer? _pollingTimer;
+  StreamSubscription<ConnectivityResult>? _connectivitySubscription;
   bool _lastStatus = false;
+  bool _hasReportedStatus = false;
 
   Stream<bool> get internetStatus => _internetStatusController.stream;
 
   ConnectivityService() {
     // Start monitoring connectivity changes
-    _connectivity.onConnectivityChanged.listen(_checkInternetAccess);
+    _connectivitySubscription =
+        _connectivity.onConnectivityChanged.listen(_checkInternetAccess);
+    _pollingTimer = Timer.periodic(
+      const Duration(seconds: 5),
+      (_) => _checkInternetAccess(null),
+    );
     // Initial check
     _checkInternetAccess(null);
   }
 
   void dispose() {
     _pollingTimer?.cancel();
+    _connectivitySubscription?.cancel();
     _internetStatusController.close();
   }
 
@@ -34,11 +47,18 @@ class ConnectivityService {
     }
 
     try {
-      // Try to access a reliable endpoint
-      final response = await http.get(Uri.parse('https://8.8.8.8')).timeout(
-            const Duration(seconds: 5),
-          );
-      _updateStatus(response.statusCode == 200);
+      for (final probeUri in _probeUris) {
+        final response = await http.get(Uri.parse(probeUri)).timeout(
+              const Duration(seconds: 5),
+            );
+        if (response.statusCode == 204 ||
+            (response.statusCode == 200 && response.body.trim().isEmpty)) {
+          _updateStatus(true);
+          return;
+        }
+      }
+
+      _updateStatus(false);
     } on TimeoutException catch (_) {
       _updateStatus(false);
     } on SocketException catch (_) {
@@ -50,7 +70,8 @@ class ConnectivityService {
   }
 
   void _updateStatus(bool hasInternet) {
-    if (_lastStatus != hasInternet) {
+    if (!_hasReportedStatus || _lastStatus != hasInternet) {
+      _hasReportedStatus = true;
       _lastStatus = hasInternet;
       _internetStatusController.add(hasInternet);
     }
