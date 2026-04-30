@@ -1,4 +1,3 @@
-import 'package:cdk_flutter/cdk_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -195,19 +194,27 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     final selectedDataAmountLabel =
         _selectedDataAmountLabel(tollgateInfo, _selectedPackage);
     final selectedPrice = _packagePrice(tollgateInfo, _selectedPackage);
-    final regularEcashAsync = ref.watch(regularEcashLocalTokenStreamProvider);
-    final swappedEcashBalanceAsync = ref.watch(swappedEcashBalanceProvider);
-    final swappedEcashPoolsAsync = ref.watch(swappedEcashPoolBalancesProvider);
-    final regularEcash = regularEcashAsync.valueOrNull;
-    final hasEnoughSwapped = selectedPrice != null &&
-        (swappedEcashPoolsAsync.valueOrNull ?? const []).fold<BigInt>(
-              BigInt.zero,
-              (total, pool) => total + pool.amount,
-            ) >=
-            BigInt.from(selectedPrice);
-    final hasEnoughBalance = selectedPrice != null &&
-        (hasEnoughSwapped ||
-            regularEcash?.amount == BigInt.from(selectedPrice));
+    final storedSwappedTokensAsync =
+        ref.watch(swappedEcashOneSatTokensProvider);
+    final storedSwappedBalanceAsync = storedSwappedTokensAsync.whenData(
+      (tokens) => tokens.fold<BigInt>(
+        BigInt.zero,
+        (total, token) => total + token.amount,
+      ),
+    );
+    final storedSwappedBalance =
+        storedSwappedBalanceAsync.valueOrNull ?? BigInt.zero;
+    final legacySwappedToken =
+        ref.watch(legacySwappedEcashLocalTokenStreamProvider).valueOrNull;
+    final selectedAmount =
+        selectedPrice == null ? null : BigInt.from(selectedPrice);
+    final exactMatchLegacyAmount =
+        selectedAmount != null && legacySwappedToken?.amount == selectedAmount
+            ? selectedAmount
+            : null;
+    final hasEnoughSwapped = selectedAmount != null &&
+        (storedSwappedBalance >= selectedAmount ||
+            exactMatchLegacyAmount != null);
 
     return Scaffold(
       appBar: AppBar(
@@ -245,10 +252,10 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
               _buildPackageSelector(tollgateInfo),
             const SizedBox(height: 16),
             _LocalEcashCard(
-              regularEcashAsync: regularEcashAsync,
-              swappedEcashBalanceAsync: swappedEcashBalanceAsync,
+              storedSwappedBalanceAsync: storedSwappedBalanceAsync,
+              exactMatchLegacyAmount: exactMatchLegacyAmount,
               selectedPrice: selectedPrice,
-              hasEnoughBalance: hasEnoughBalance,
+              hasEnoughBalance: hasEnoughSwapped,
             ),
             const SizedBox(height: 16),
             const _InfoCard(
@@ -261,7 +268,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
             const _InfoCard(
               title: 'Offline payment',
               message:
-                  'TollGate top-up splits the active local eCash token offline, then sends the selected raw Cashu token directly to the router. If exact splits fail, swap your regular eCash into swapped eCash from the wallet page first.',
+                  'TollGate top-up only submits already-stored local swapped tokens to 172.19.217.1. It does not prepare, split, or swap tokens during top-up.',
               icon: Icons.offline_bolt_rounded,
             ),
             const SizedBox(height: 16),
@@ -289,7 +296,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                     onPressed: _isSubmitting ||
                             tollgateInfo == null ||
                             selectedPrice == null ||
-                            !hasEnoughBalance
+                            !hasEnoughSwapped
                         ? null
                         : () => _submitTopUp(tollgateInfo, selectedPrice),
                     icon: _isSubmitting
@@ -515,21 +522,25 @@ class _NetworkSummaryCard extends StatelessWidget {
 
 class _LocalEcashCard extends StatelessWidget {
   const _LocalEcashCard({
-    required this.regularEcashAsync,
-    required this.swappedEcashBalanceAsync,
+    required this.storedSwappedBalanceAsync,
+    required this.exactMatchLegacyAmount,
     required this.selectedPrice,
     required this.hasEnoughBalance,
   });
 
-  final AsyncValue<Token?> regularEcashAsync;
-  final AsyncValue<BigInt> swappedEcashBalanceAsync;
+  final AsyncValue<BigInt> storedSwappedBalanceAsync;
+  final BigInt? exactMatchLegacyAmount;
   final int? selectedPrice;
   final bool hasEnoughBalance;
 
   @override
   Widget build(BuildContext context) {
-    final regularToken = regularEcashAsync.valueOrNull;
-    final swappedBalance = swappedEcashBalanceAsync.valueOrNull;
+    final storedSwappedBalance = storedSwappedBalanceAsync.valueOrNull;
+    final displayedBalance = exactMatchLegacyAmount != null &&
+            (storedSwappedBalance == null ||
+                exactMatchLegacyAmount! > storedSwappedBalance)
+        ? exactMatchLegacyAmount
+        : storedSwappedBalance;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -557,7 +568,7 @@ class _LocalEcashCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          if (!regularEcashAsync.hasValue || swappedBalance == null)
+          if (displayedBalance == null)
             const Center(child: CircularProgressIndicator())
           else
             Column(
@@ -567,7 +578,7 @@ class _LocalEcashCard extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      '$swappedBalance sats swapped',
+                      '$displayedBalance sats stored offline',
                       style: context.textTheme.titleLarge?.copyWith(
                         fontWeight: FontWeight.bold,
                         color: selectedPrice == null || hasEnoughBalance
@@ -589,18 +600,11 @@ class _LocalEcashCard extends StatelessWidget {
                       ),
                   ],
                 ),
-                const SizedBox(height: 6),
-                Text(
-                  'Regular eCash: ${regularToken?.amount ?? BigInt.zero} sats',
-                  style: context.textTheme.bodySmall,
-                ),
-                if (regularToken != null) ...[
-                  const SizedBox(height: 4),
+                if (exactMatchLegacyAmount != null) ...[
+                  const SizedBox(height: 8),
                   Text(
-                    'Regular token mint: ${regularToken.mintUrl}',
+                    'An exact stored swapped token matches this top-up.',
                     style: context.textTheme.bodySmall,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ],

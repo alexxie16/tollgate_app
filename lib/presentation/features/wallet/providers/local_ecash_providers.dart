@@ -29,10 +29,40 @@ Stream<Token?> legacySwappedEcashLocalTokenStream(Ref ref) async* {
   }
 }
 
+final regularEcashBalanceProvider = FutureProvider<BigInt>((ref) async {
+  final regularToken =
+      await ref.watch(regularEcashLocalTokenStreamProvider.future);
+  final stagingBalances =
+      await ref.watch(stagingEcashPendingBalancesProvider.future);
+
+  final stagingTotal = stagingBalances.fold<BigInt>(
+    BigInt.zero,
+    (total, balance) => total + balance.amount,
+  );
+
+  return (regularToken?.amount ?? BigInt.zero) + stagingTotal;
+});
+
 @Riverpod(keepAlive: true)
 Future<BigInt> swappedEcashBalance(Ref ref) async {
-  final tokens = await swappedEcashOneSatTokens(ref);
-  return BigInt.from(tokens.length);
+  final poolBalances = await ref.watch(swappedEcashPoolBalancesProvider.future);
+  final storedOneSatTokens =
+      await ref.watch(swappedEcashOneSatTokensProvider.future);
+  final legacySwappedToken =
+      await ref.watch(legacySwappedEcashLocalTokenStreamProvider.future);
+
+  final poolTotal = poolBalances.fold<BigInt>(
+    BigInt.zero,
+    (total, balance) => total + balance.amount,
+  );
+  final storedTokenTotal = storedOneSatTokens.fold<BigInt>(
+    BigInt.zero,
+    (total, token) => total + token.amount,
+  );
+
+  return poolTotal +
+      storedTokenTotal +
+      (legacySwappedToken?.amount ?? BigInt.zero);
 }
 
 @Riverpod(keepAlive: true)
@@ -44,21 +74,8 @@ Future<List<LocalEcashPendingBalance>> stagingEcashPendingBalances(
 
 @Riverpod(keepAlive: true)
 Future<List<LocalEcashPendingBalance>> swappedEcashPoolBalances(Ref ref) async {
-  final tokens = await swappedEcashOneSatTokens(ref);
-  final totals = <String, BigInt>{};
-  for (final token in tokens) {
-    totals[token.mintUrl] = (totals[token.mintUrl] ?? BigInt.zero) + BigInt.one;
-  }
-
-  return totals.entries
-      .map(
-        (entry) => LocalEcashPendingBalance(
-          mintUrl: entry.key,
-          amount: entry.value,
-        ),
-      )
-      .toList()
-    ..sort((a, b) => a.mintUrl.compareTo(b.mintUrl));
+  final localEcashWalletService = ref.watch(localEcashWalletServiceProvider);
+  return localEcashWalletService.listPoolBalances();
 }
 
 @Riverpod(keepAlive: true)
@@ -75,6 +92,7 @@ Future<void> storeLocalEcash(Ref ref, String encoded) async {
   final ecashLocalStorage = ref.watch(ecashLocalStorageProvider);
   await ecashLocalStorage.storeLocalEcash(encoded);
   ref.invalidate(regularEcashLocalTokenStreamProvider);
+  ref.invalidate(regularEcashBalanceProvider);
   ref.invalidate(stagingEcashPendingBalancesProvider);
   ref.invalidate(swappedEcashBalanceProvider);
   ref.invalidate(swappedEcashPoolBalancesProvider);
@@ -86,6 +104,7 @@ Future<void> clearLocalEcash(Ref ref) async {
   final ecashLocalStorage = ref.watch(ecashLocalStorageProvider);
   await ecashLocalStorage.clearLocalEcash();
   ref.invalidate(regularEcashLocalTokenStreamProvider);
+  ref.invalidate(regularEcashBalanceProvider);
   ref.invalidate(stagingEcashPendingBalancesProvider);
   ref.invalidate(swappedEcashBalanceProvider);
   ref.invalidate(swappedEcashPoolBalancesProvider);
@@ -97,6 +116,7 @@ Future<void> storeLegacySwappedEcash(Ref ref, String encoded) async {
   final ecashLocalStorage = ref.watch(ecashLocalStorageProvider);
   await ecashLocalStorage.storeSwappedEcash(encoded);
   ref.invalidate(legacySwappedEcashLocalTokenStreamProvider);
+  ref.invalidate(regularEcashBalanceProvider);
   ref.invalidate(stagingEcashPendingBalancesProvider);
   ref.invalidate(swappedEcashBalanceProvider);
   ref.invalidate(swappedEcashPoolBalancesProvider);
@@ -108,6 +128,7 @@ Future<void> clearLegacySwappedEcash(Ref ref) async {
   final ecashLocalStorage = ref.watch(ecashLocalStorageProvider);
   await ecashLocalStorage.clearSwappedEcash();
   ref.invalidate(legacySwappedEcashLocalTokenStreamProvider);
+  ref.invalidate(regularEcashBalanceProvider);
   ref.invalidate(stagingEcashPendingBalancesProvider);
   ref.invalidate(swappedEcashBalanceProvider);
   ref.invalidate(swappedEcashPoolBalancesProvider);
@@ -120,6 +141,7 @@ Future<void> storeSwappedOneSatTokens(
   final ecashLocalStorage = ref.watch(ecashLocalStorageProvider);
   await ecashLocalStorage.storeSwappedOneSatTokens(encodedTokens);
   ref.invalidate(swappedEcashOneSatTokensProvider);
+  ref.invalidate(regularEcashBalanceProvider);
   ref.invalidate(swappedEcashBalanceProvider);
   ref.invalidate(swappedEcashPoolBalancesProvider);
 }
@@ -129,6 +151,7 @@ Future<void> clearSwappedOneSatTokens(Ref ref) async {
   final ecashLocalStorage = ref.watch(ecashLocalStorageProvider);
   await ecashLocalStorage.clearSwappedOneSatTokens();
   ref.invalidate(swappedEcashOneSatTokensProvider);
+  ref.invalidate(regularEcashBalanceProvider);
   ref.invalidate(swappedEcashBalanceProvider);
   ref.invalidate(swappedEcashPoolBalancesProvider);
 }

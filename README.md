@@ -8,15 +8,15 @@ Flutter mobile application for discovering TollGate Wi-Fi networks and paying fo
 - Android emulator launch and app install verified locally with `flutter run -d emulator-5554 --debug --no-resident`
 - Android phone sideload verified locally with `adb install -r build/app/outputs/flutter-apk/app-debug.apk`
 - Wallet mint configuration flow now exists in-app under Settings
-- Default wallet mint is Minibits at `https://mint.minibits.cash/Bitcoin`, with support for custom mint URLs
+- Built-in wallet mint presets now include Minibits first and Coinos second, with support for custom mint URLs
 - Wallet home is now simplified to `Send` and `Receive` only
 - Wallet `Receive` now supports both pasted Cashu tokens and invoice creation, and stores the result as regular local eCash
 - Wallet `Send` now prefers swapped local eCash for exact offline splits and falls back to regular local eCash when needed
-- Wallet home now shows both regular eCash and swapped eCash, with a manual `Swap All` action to convert regular eCash into swapped `1 sat` proofs
+- Wallet home now shows both regular eCash and swapped eCash, with a manual `Swap All Regular eCash` action to convert regular eCash into swapped `1 sat` proofs
 - The Home screen now shows actual remaining TollGate session data from the router `usage` endpoint, instead of estimating from wallet balance
 - Available TollGate network scan cards no longer show fake random `sats/min`; live pricing is only shown after connecting to a TollGate
 - TollGate SSIDs can now be connected from the home and scan flows, then load live pricing from `http://172.19.217.1:2121`
-- TollGate top-up now uses the one stored local eCash token, splits it offline, and submits the selected raw token to `POST http://172.19.217.1:2121/`
+- TollGate top-up now prefers swapped local eCash for exact offline payment, falls back to an exact-match regular token when possible, and submits the selected raw token to `POST http://172.19.217.1:2121/`
 - The app does not require showing a captive-portal UI to the user for the current TollGate payment flow
 - Primary supported build target is Android
 - iOS/macOS toolchain can be configured, but the app's Wi-Fi connection flow is Android-first
@@ -124,22 +124,29 @@ build/app/outputs/flutter-apk/app-debug.apk
 
 ### Default mint
 
-If no mint has been configured yet, the app now defaults to the Minibits mint:
+If no mint has been configured yet, the app defaults to the first built-in preset, Minibits:
 
 ```text
 https://mint.minibits.cash/Bitcoin
 ```
 
-That URL was validated against the mint info endpoint:
+The second built-in preset is Coinos:
+
+```text
+https://mint.coinos.io
+```
+
+The built-in presets were validated against their mint info endpoints:
 
 ```text
 https://mint.minibits.cash/Bitcoin/v1/info
+https://mint.coinos.io/v1/info
 ```
 
 ### Configure or change mint
 
 1. Open `Settings`.
-2. Use `Use Default Minibits Mint` for the default path, or enter another Cashu mint URL.
+2. Use `Use Minibits` or `Use Coinos` for the built-in presets, or enter another Cashu mint URL.
 3. Tap `Save Mint`.
 4. Use the `Configured Mints` list to switch between already-added mints.
 
@@ -151,11 +158,12 @@ https://mint.minibits.cash/Bitcoin/v1/info
 4. Enter the amount in sats.
 5. Tap `Create Invoice`.
 6. Pay the displayed Lightning invoice externally.
-7. Once the mint quote reaches `issued`, the app converts the minted amount into the stored local eCash token.
+7. Once the mint quote reaches `issued`, the app converts the minted amount into regular local eCash.
+8. If the mint does not return the first quote in time, the app shows a retryable error instead of loading forever.
 
 ### Current verification state
 
-- The mint configuration flow, mint screen validation, and invoice error handling are implemented.
+- The mint configuration flow, receive-screen invoice creation, and invoice error handling are implemented.
 - Android build and runtime smoke tests were rerun after these changes.
 - End-to-end balance update after paying a real invoice still requires manual payment verification.
 
@@ -171,7 +179,7 @@ https://mint.minibits.cash/Bitcoin/v1/info
 
 Implementation notes:
 
-- One regular local token and one swapped local token are supported for now.
+- The UI exposes two local eCash buckets: regular eCash and swapped eCash.
 - If a regular token is already stored, the app asks you to send, spend, clear, or swap it before receiving another regular token.
 - Creating an invoice requires internet and mint access. The wallet and TollGate still work partially offline with an already stored local token.
 - Swapping regular eCash into swapped eCash is a manual wallet action and requires internet plus mint connectivity.
@@ -189,10 +197,10 @@ Implementation notes:
 The wallet home now shows local eCash buckets, not a combined mint-backed account balance.
 
 - `Receive` prepares regular local eCash.
-- `Swap All` converts regular local eCash into swapped local eCash with `1 sat` proofs.
-- `Swap All` uses a hidden staging wallet plus a separate hidden one-sat pool wallet, built entirely with the stock wallet API.
+- `Swap All Regular eCash` converts regular local eCash into swapped local eCash with `1 sat` proofs.
 - `Send` and TollGate payment prefer swapped local eCash because it is easier to split exactly offline.
-- The wallet page also shows swapped eCash pool balances and any legacy swapped token waiting to be imported into that pool.
+- The wallet UI only shows the two user-facing buckets: regular eCash and swapped eCash.
+- The displayed regular balance includes any in-progress hidden staging balance during swap so the visible amount stays accurate.
 - Wallet history includes both wallet backend transactions and successful TollGate payments sent by the app.
 - The app no longer exposes `Reserve` or `Melt` in the wallet UI.
 
@@ -242,6 +250,7 @@ Implementation notes:
 - The TollGate purchase flow does not call the mint at payment time; it only posts the selected local token slice to the router endpoint.
 - If a regular token cannot satisfy the selected amount exactly, swap all local eCash into swapped eCash from the wallet page first.
 - The connected TollGate card on Home shows actual remaining data from the router's `/usage` endpoint.
+- The Home and TollGate UI refresh after a successful top-up so restored internet/session state is reflected without restarting the app.
 - The payment request posts the raw Cashu token body directly to the router endpoint instead of wrapping it in JSON.
 - The app logs the router payment URL, request payload, and HTTP response in debug output to help with on-device testing.
 - Android cleartext HTTP is enabled because the router APIs are local `http://` endpoints.
@@ -310,10 +319,10 @@ flutter config --jdk-dir="/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Conte
 
 If the wallet says no mint is configured, open `Settings` and either:
 
-- tap `Use Default Minibits Mint`, or
+- tap `Use Minibits` or `Use Coinos`, or
 - paste another valid Cashu mint URL and tap `Save Mint`
 
-If invoice creation fails, verify that the configured mint URL is reachable and supports Cashu minting, then retry from the Mint screen.
+If invoice creation fails, verify that the configured mint URL is reachable and supports Cashu minting, then retry from the `Receive` screen.
 
 If a received token fails to import, verify that:
 

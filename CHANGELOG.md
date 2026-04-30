@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-04-03
+
+### Attempt 20 - Wallet state refresh, invoice hardening, and built-in mint presets
+
+- Fixed internet detection to use real connectivity probes and polling so invoice creation and post-payment UI refresh are based on actual network reachability.
+- Hardened the receive invoice flow so it waits for the mint quote to reach `issued`, stores the resulting value as regular local eCash, and refreshes wallet balances immediately after receive success.
+- Replaced the invoice quote provider with a stable mint-url-and-amount keyed stream and now surface a retryable timeout error instead of leaving the UI stuck loading forever when the mint never returns the first quote.
+- Simplified the wallet's local eCash UI to only show the two user-facing buckets: regular eCash and swapped eCash.
+- Made `Swap All Regular eCash` retry-safe by resuming interrupted swaps from hidden staging state instead of failing with `Token already spent` when the regular token was already imported.
+- Changed the displayed regular eCash balance to include hidden in-progress staging balance so receive and swap flows no longer under-report visible funds.
+- Updated TollGate top-up to export exact amounts from the swapped pool when available, restore exported pool tokens on router submission failure when possible, and refresh connection and usage UI immediately after successful payment.
+- Added built-in mint presets for Minibits and Coinos in Settings, with Minibits restored as the first default option and Coinos available as the second preset.
+- Updated `README.md` to document the built-in mint presets, invoice timeout behavior, simplified regular-vs-swapped wallet model, and the TollGate UI refresh behavior.
+- Re-ran `flutter analyze` with no new analysis errors, only existing project warnings/info.
+
 ## 2026-04-02
 
 ### Attempt 6 - TollGate API connect and top-up flow
